@@ -5,7 +5,6 @@ import java.util.Date
 import io.circe.jawn
 import javax.crypto.spec.SecretKeySpec
 import javax.crypto.{Cipher, Mac}
-import javax.xml.bind.DatatypeConverter
 import org.http4s.Http4s._
 import org.http4s._
 import org.http4s.headers.{Cookie => CookieHeader}
@@ -15,6 +14,8 @@ import org.slf4j.LoggerFactory
 import scalaz.OptionT
 import scalaz.Scalaz._
 import scalaz.concurrent.Task
+import java.util.Base64
+import org.apache.commons.codec.binary.Hex
 
 import scala.concurrent.duration.Duration
 import scala.util.Try
@@ -108,20 +109,20 @@ final case class SessionConfig(
   private[this] def encrypt(content: String): String = {
     val cipher = Cipher.getInstance("AES")
     cipher.init(Cipher.ENCRYPT_MODE, keySpec)
-    DatatypeConverter.printHexBinary(cipher.doFinal(content.getBytes("UTF-8")))
+    Hex.encodeHex(cipher.doFinal(content.getBytes("UTF-8"))).mkString
   }
 
   private[this] def decrypt(content: String): Option[String] = {
     val cipher = Cipher.getInstance("AES")
     cipher.init(Cipher.DECRYPT_MODE, keySpec)
-    Try(new String(cipher.doFinal(DatatypeConverter.parseHexBinary(content)), "UTF-8")).toOption
+    Try(new String(cipher.doFinal(Hex.decodeHex(content)), "UTF-8")).toOption
   }
 
   private[this] def sign(content: String): String = {
     val signKey = secret.getBytes("UTF-8")
     val signMac = Mac.getInstance("HmacSHA1")
     signMac.init(new SecretKeySpec(signKey, "HmacSHA256"))
-    DatatypeConverter.printBase64Binary(signMac.doFinal(content.getBytes("UTF-8")))
+    Base64.getEncoder.encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
   }
 
   def cookie(content: String): Task[Cookie] =

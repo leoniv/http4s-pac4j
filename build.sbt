@@ -1,7 +1,7 @@
-scalaVersion := "2.12.7" // Also supports 2.11.x
+scalaVersion := "2.12.11" // Also supports 2.11.x
 organization := "org.pac4j"
 
-version      := "1.0.0-SNAPSHOT"
+version      := "1.1.0-SNAPSHOT"
 
 val circeVersion = "0.9.3"
 val http4sVersion = "0.16.6a"
@@ -15,6 +15,7 @@ libraryDependencies ++= Seq(
   "org.http4s" %% "http4s-server" % http4sVersion,
   "org.pac4j" % "pac4j-core" % pac4jVersion,
   "org.slf4j" % "slf4j-api" % "1.7.26",
+  "commons-codec" % "commons-codec" % "1.14",
 
   "io.circe" %% "circe-optics" % circeVersion % Test,
   "org.http4s" %% "http4s-jawn" % http4sVersion % Test,
