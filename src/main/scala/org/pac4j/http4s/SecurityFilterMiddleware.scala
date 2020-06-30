@@ -8,7 +8,7 @@ import org.pac4j.core.config.Config
 import org.pac4j.core.engine.{DefaultSecurityLogic, SecurityGrantedAccessAdapter}
 import org.pac4j.core.http.adapter.HttpActionAdapter
 import org.pac4j.core.profile.CommonProfile
-import scalaz.concurrent.Task
+import fs2.Task
 
 
 /**

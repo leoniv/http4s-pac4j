@@ -2,6 +2,10 @@ package org.pac4j.http4s
 
 import java.util.Date
 
+import cats.implicits._
+import cats.data.OptionT
+import fs2.interop.cats._
+import fs2.Task
 import io.circe.jawn
 import javax.crypto.spec.SecretKeySpec
 import javax.crypto.{Cipher, Mac}
@@ -11,9 +15,6 @@ import org.http4s.headers.{Cookie => CookieHeader}
 import org.http4s.server.{HttpMiddleware, Middleware}
 import org.pac4j.http4s.SessionSyntax._
 import org.slf4j.LoggerFactory
-import scalaz.OptionT
-import scalaz.Scalaz._
-import scalaz.concurrent.Task
 import java.util.Base64
 import org.apache.commons.codec.binary.Hex
 
@@ -30,6 +31,7 @@ import scala.util.Try
 
 
 object SessionSyntax {
+  import implicits._
   implicit final class RequestOps(val v: Request) extends AnyVal {
     def session: Task[Option[Session]] =
       Task.now(v.attributes.get(Session.requestAttr))
@@ -161,6 +163,7 @@ final case class SessionConfig(
 }
 
 object Session {
+  import implicits._
   private val logger = LoggerFactory.getLogger(this.getClass)
 
   val requestAttr = AttributeKey[Session]
@@ -178,9 +181,9 @@ object Session {
   private[this] def sessionFromRequest(config: SessionConfig, request: Request): Task[Option[Session]] =
     (for {
       allCookies <- OptionT(Task.now(CookieHeader.from(request.headers)))
-      sessionCookie <- OptionT(Task.now(allCookies.values.list.find(_.name === config.cookieName)))
+      sessionCookie <- OptionT(Task.now(allCookies.values.toList.find(_.name === config.cookieName)))
       session <- OptionT(checkSignature(config, sessionCookie))
-    } yield session).run
+    } yield session).value
 
   private[this] def applySessionUpdates(
     config: SessionConfig,
@@ -220,13 +223,13 @@ object Session {
   def sessionRequired(fallback: Task[Response]): HttpMiddleware =
     Middleware { (request, service) =>
       import SessionSyntax._
-      OptionT(request.session).flatMapF(_ => service(request)).getOrElseF(fallback)
+      OptionT(request.session).flatMapF(_ => service(request).map(_.toOption)).getOrElseF(fallback)
     }
 
   def printRequestSessionKeys(sessionOpt: Option[Session]): Task[Unit] =
     Task.delay {
       sessionOpt match {
-        case Some(session) => logger.debug("Request Session contains keys: " + session.asObject.map(_.keys.mkString(", ")))
+        case Some(session) => logger.debug("Request Session contains keys: " + session.asObject.map(_.toMap.keys.mkString(", ")))
         case None => logger.debug("Request Session empty")
       }
     }

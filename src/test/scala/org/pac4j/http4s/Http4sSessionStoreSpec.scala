@@ -22,7 +22,7 @@ object Http4sCookieSessionStoreSpec extends Specification {
       get(Some(session), "test") must beSome("hello")
     }
     "return value if session exists and key present among others" >> {
-      val session = Json.fromJsonObject(JsonObject("test" -> Json.fromString(serialise("hello")), "other" -> Json.fromString(serialise("value"))))
+      val session = Json.fromJsonObject(JsonObject.fromMap(Map("test" -> Json.fromString(serialise("hello")), "other" -> Json.fromString(serialise("value")))))
       get(Some(session), "test") must beSome("hello")
     }
   }

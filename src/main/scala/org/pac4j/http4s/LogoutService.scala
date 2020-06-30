@@ -4,7 +4,7 @@ import org.http4s.{Response, _}
 import org.pac4j.core.config.Config
 import org.pac4j.core.engine.DefaultLogoutLogic
 import org.pac4j.core.http.adapter.HttpActionAdapter
-import scalaz.concurrent.Task
+import fs2.Task
 
 /**
   * Http4s Service to handle user logging out from the website

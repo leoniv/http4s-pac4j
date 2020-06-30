@@ -4,7 +4,7 @@ import org.http4s.{Request, Response}
 import org.pac4j.core.config.Config
 import org.pac4j.core.engine.DefaultCallbackLogic
 import org.pac4j.core.http.adapter.HttpActionAdapter
-import scalaz.concurrent.Task
+import fs2.Task
 
 /**
   * Http4s Service to handle callback from after login

@@ -11,7 +11,6 @@ import org.http4s.headers.{Cookie => CookieHeader}
 import org.pac4j.core.config.Config
 import org.pac4j.core.profile.CommonProfile
 import org.slf4j.LoggerFactory
-import scalaz.{-\/, \/-}
 
 import scala.collection.JavaConverters._
 
@@ -40,8 +39,8 @@ class Http4sWebContext(private var request: Request, private val sessionStore: S
     if (request.contentType.contains(`Content-Type`(MediaType.`application/x-www-form-urlencoded`))) {
       logger.debug(s"getRequestParameter: Getting from Url Encoded Form name=$name")
       UrlForm.decodeString(Charset.`UTF-8`)(getRequestContent) match {
-        case -\/(err) => throw new Exception(err.toString)
-        case \/-(urlForm) => urlForm.getFirstOrElse(name, request.params.get(name).orNull)
+        case Left(err) => throw new Exception(err.toString)
+        case Right(urlForm) => urlForm.getFirstOrElse(name, request.params.get(name).orNull)
       }
     } else {
       logger.debug(s"getRequestParameter: Getting from query params name=$name")
@@ -88,7 +87,7 @@ class Http4sWebContext(private var request: Request, private val sessionStore: S
     logger.debug("writeResponseContent")
     val contentType = response.contentType
     modifyResponse { r =>
-      r.withBody(content).unsafePerformSync
+      r.withBody(content).unsafeRun
         // withBody overwrites the contentType to text/plain. Set it back to what it was before.
         .withContentType(contentType)
     }
@@ -130,7 +129,7 @@ class Http4sWebContext(private var request: Request, private val sessionStore: S
     logger.debug("getRequestCookies")
     val convertCookie = (c: org.http4s.Cookie) => new org.pac4j.core.context.Cookie(c.name, c.content)
     val cookies = CookieHeader.from(request.headers).map(_.values.map(convertCookie))
-    cookies.map(_.list).getOrElse(Nil).asJavaCollection
+    cookies.map(_.toList).getOrElse(Nil).asJavaCollection
   }
 
   override def addResponseCookie(cookie: Cookie): Unit = {
@@ -152,7 +151,7 @@ class Http4sWebContext(private var request: Request, private val sessionStore: S
   override def getPath: String = request.uri.path.toString
 
   override def getRequestContent: String = {
-    request.bodyAsText.runLast.unsafePerformSync.orNull
+    request.bodyAsText.runLast.unsafeRun.orNull
   }
 
   override def getProtocol: String = request.uri.scheme.get.value

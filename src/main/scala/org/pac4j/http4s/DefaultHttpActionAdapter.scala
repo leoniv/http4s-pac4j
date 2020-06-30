@@ -3,7 +3,7 @@ package org.pac4j.http4s
 import org.http4s.{Response, Status}
 import org.pac4j.core.context.HttpConstants
 import org.pac4j.core.http.adapter.HttpActionAdapter
-import scalaz.concurrent.Task
+import fs2.Task
 
 /**
   * DefaultHttpActionAdapter sets the correct status codes on the response.
