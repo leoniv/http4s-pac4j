@@ -2,11 +2,13 @@ scalaVersion := "2.12.11" // Also supports 2.11.x
 organization := "org.pac4j"
 version      := "1.1.0-SNAPSHOT"
 
-val circeVersion = "0.8.0"
-val http4sVersion = "0.17.6"
+val circeVersion = "0.13.0"
+val http4sVersion = "0.21.6"
 val pac4jVersion = "3.8.3"
 val specs2Version = "3.8.9"
-val catsVersion = "0.9.0"
+val catsVersion = "2.1.1"
+val catsEffectVersion = "2.1.3"
+val vaultVersion = "2.0.0"
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
@@ -18,6 +20,7 @@ libraryDependencies ++= Seq(
   "org.slf4j" % "slf4j-api" % "1.7.26",
   "commons-codec" % "commons-codec" % "1.14",
   "org.typelevel" %% "cats-core" % catsVersion,
+  "io.chrisdavenport" %% "vault" % vaultVersion,
 
   "io.circe" %% "circe-optics" % circeVersion % Test,
   "org.http4s" %% "http4s-jawn" % http4sVersion % Test,

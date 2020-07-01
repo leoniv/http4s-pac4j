@@ -4,14 +4,13 @@ import java.util.Date
 
 import cats.implicits._
 import cats.data.OptionT
-import fs2.interop.cats._
-import fs2.Task
+import cats.effect._
+import io.chrisdavenport.vault.Key
 import io.circe.jawn
 import javax.crypto.spec.SecretKeySpec
 import javax.crypto.{Cipher, Mac}
 import org.http4s.Http4s._
 import org.http4s._
-import org.http4s.headers.{Cookie => CookieHeader}
 import org.http4s.server.{HttpMiddleware, Middleware}
 import org.pac4j.http4s.SessionSyntax._
 import org.slf4j.LoggerFactory
@@ -32,50 +31,50 @@ import scala.util.Try
 
 object SessionSyntax {
   import implicits._
-  implicit final class RequestOps(val v: Request) extends AnyVal {
-    def session: Task[Option[Session]] =
-      Task.now(v.attributes.get(Session.requestAttr))
+  implicit final class RequestOps[F[_]](val v: Request[F]) extends AnyVal {
+    def session(implicit S: Sync[F]): F[Option[Session]] =
+      ??? //FIXME S.pure(v.attributes.lookup(Session.requestAttr))
 
     def session2: Option[Session] =
-      v.attributes.get(Session.requestAttr)
+      ??? //FIXME v.attributes.lookup(Session.requestAttr)
   }
 
-  implicit final class TaskResponseOps(val v: Task[Response]) extends AnyVal {
-    def clearSession: Task[Response] =
-      v.withAttribute(Session.responseAttr(_ => None))
+// FIXME:
+//  implicit final class TaskResponseOps[F[_]](val v: F[Response]) extends AnyVal {
+//    def clearSession: F[Response] =
+//      v.withAttribute(Session.responseAttr(_ => None))
+//
+//    def modifySession(f: Session => Session): Task[Response] = {
+//      val lf: Option[Session] => Option[Session] = _.cata(f.andThen(_.some), None)
+//      v.map { response =>
+//        response.withAttribute(Session.responseAttr(response.attributes.get(Session.responseAttr).cata(_.andThen(lf), lf)))
+//      }
+//    }
+//
+//    def newSession(session: Session): Task[Response] =
+//      v.withAttribute(Session.responseAttr(_ => Some(session)))
+//  }
 
-    def modifySession(f: Session => Session): Task[Response] = {
+  implicit final class ResponseOps[F[_]](val v: Response[F]) extends AnyVal {
+    def clearSession: Response[F] =
+      ??? //FIXME: v.withAttribute(Session.responseAttr, _ => None)
+
+    def modifySession(f: Session => Session): Response[F] = {
       val lf: Option[Session] => Option[Session] = _.cata(f.andThen(_.some), None)
-      v.map { response =>
-        response.withAttribute(Session.responseAttr(response.attributes.get(Session.responseAttr).cata(_.andThen(lf), lf)))
-      }
+      ??? //FIXME: v.withAttribute(Session.responseAttr(v.attributes.lookup(Session.responseAttr).cata(_.andThen(lf), lf)))
     }
 
-    def newSession(session: Session): Task[Response] =
-      v.withAttribute(Session.responseAttr(_ => Some(session)))
+    def newOrModifySession(f: Option[Session] => Session): Response[F] = {
+//      val newUpdateFn: Option[Session] => Option[Session] = v.attributes.lookup(Session.responseAttr) match {
+//        case Some(currentUpdateFn) => currentUpdateFn.andThen(f.andThen(_.some))
+//        case None => f.andThen(_.some)
+//      }
+      ??? //FIXME: v.withAttribute(Session.responseAttr(newUpdateFn))
+    }
+
+    def newSession(session: Session): Response[F] =
+     ??? //FIXME:  v.withAttribute(Session.responseAttr(_ => Some(session)))
   }
-
-  implicit final class ResponseOps(val v: Response) extends AnyVal {
-    def clearSession: Response =
-      v.withAttribute(Session.responseAttr(_ => None))
-
-    def modifySession(f: Session => Session): Response = {
-      val lf: Option[Session] => Option[Session] = _.cata(f.andThen(_.some), None)
-      v.withAttribute(Session.responseAttr(v.attributes.get(Session.responseAttr).cata(_.andThen(lf), lf)))
-    }
-
-    def newOrModifySession(f: Option[Session] => Session): Response = {
-      val newUpdateFn: Option[Session] => Option[Session] = v.attributes.get(Session.responseAttr) match {
-        case Some(currentUpdateFn) => currentUpdateFn.andThen(f.andThen(_.some))
-        case None => f.andThen(_.some)
-      }
-      v.withAttribute(Session.responseAttr(newUpdateFn))
-    }
-
-    def newSession(session: Session): Response =
-      v.withAttribute(Session.responseAttr(_ => Some(session)))
-  }
-
 }
 
 /**
@@ -86,9 +85,9 @@ object SessionSyntax {
   * @param secret
   * @param maxAge
   */
-final case class SessionConfig(
+final case class SessionConfig[F[_]: Sync](
   cookieName: String,
-  mkCookie: (String, String) => Cookie,
+  mkCookie: (String, String) => ResponseCookie,
   secret: String,
   maxAge: Duration
 ) {
@@ -127,8 +126,12 @@ final case class SessionConfig(
     Base64.getEncoder.encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
   }
 
-  def cookie(content: String): Task[Cookie] =
-    Task.delay {
+  // FIXME: rename to `responseCookie`
+  def cookie(content: String): F[ResponseCookie] =
+    Sync[F].delay(cookie2(content))
+
+  // FIXME: rename to `responseCookie2`
+  def cookie2(content: String): ResponseCookie = {
       val now = new Date().getTime / 1000
       val expires = now + maxAge.toSeconds
       val serialized = s"$expires-$content"
@@ -137,17 +140,9 @@ final case class SessionConfig(
       mkCookie(cookieName, s"$signed-$encrypted")
     }
 
-  def cookie2(content: String): Cookie = {
-      val now = new Date().getTime / 1000
-      val expires = now + maxAge.toSeconds
-      val serialized = s"$expires-$content"
-      val signed = sign(serialized)
-      val encrypted = encrypt(serialized)
-      mkCookie(cookieName, s"$signed-$encrypted")
-    }
-
-  def check(cookie: Cookie): Task[Option[String]] =
-    Task.delay {
+  // FIXME: rename param to `requestCookie`
+  def check(cookie: RequestCookie): F[Option[String]] =
+    Sync[F].delay {
       val now = new Date().getTime / 1000
       cookie.content.split('-') match {
         case Array(signature, value) =>
@@ -163,71 +158,76 @@ final case class SessionConfig(
 }
 
 object Session {
+  type Cookie = ResponseCookie
   import implicits._
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  val requestAttr = AttributeKey[Session]
-  val responseAttr = AttributeKey[Option[Session] => Option[Session]]
+  val requestAttr: IO[Key[Session]] = Key.newKey[IO, Session]
+  val responseAttr: IO[Key[Option[Session] => Option[Session]]] =
+    Key.newKey[IO, Option[Session] => Option[Session]]
 
-  private[this] def sessionAsCookie(config: SessionConfig, session: Session): Task[Cookie] =
+  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[Cookie] =
     config.cookie(session.noSpaces)
 
-  private[this] def sessionAsCookie2(config: SessionConfig, session: Session): Cookie =
+  private[this] def sessionAsCookie2(config: SessionConfig[IO], session: Session): Cookie =
     config.cookie2(session.noSpaces)
 
-  private[this] def checkSignature(config: SessionConfig, cookie: Cookie): Task[Option[Session]] =
+  private[this] def checkSignature(config: SessionConfig[IO], cookie: RequestCookie): IO[Option[Session]] =
     config.check(cookie).map(_.flatMap(jawn.parse(_).toOption))
 
-  private[this] def sessionFromRequest(config: SessionConfig, request: Request): Task[Option[Session]] =
+  private[this] def sessionFromRequest(config: SessionConfig[IO], request: Request[IO]): IO[Option[Session]] =
     (for {
-      allCookies <- OptionT(Task.now(CookieHeader.from(request.headers)))
-      sessionCookie <- OptionT(Task.now(allCookies.values.toList.find(_.name === config.cookieName)))
+      allCookies <- OptionT.liftF(IO.pure(request.cookies))
+      sessionCookie <- OptionT(IO.pure(allCookies.find(_.name === config.cookieName)))
       session <- OptionT(checkSignature(config, sessionCookie))
     } yield session).value
 
   private[this] def applySessionUpdates(
-    config: SessionConfig,
+    config: SessionConfig[IO],
     sessionFromRequest: Option[Session],
-    serviceResponse: MaybeResponse): Task[MaybeResponse] = {
-    Task.delay {
-      serviceResponse match {
-        case response: Response =>
-          val updateSession = response.attributes.get(responseAttr) | identity
-          updateSession(sessionFromRequest).cata(
-            session => {
-              response.addCookie(sessionAsCookie2(config, session))
-            },
-            if (sessionFromRequest.isDefined) response.removeCookie(config.cookieName) else response
-          )
-        case Pass => Pass
-      }
-    }
+    serviceResponse: OptionT[IO, Response[IO]]): OptionT[IO, Response[IO]] = {
+    ??? //  FIXME:
+//    Task.delay {
+//      serviceResponse match {
+//        case response: Response =>
+//          val updateSession = response.attributes.get(responseAttr) | identity
+//          updateSession(sessionFromRequest).cata(
+//            session => {
+//              response.addCookie(sessionAsCookie2(config, session))
+//            },
+//            if (sessionFromRequest.isDefined) response.removeCookie(config.cookieName) else response
+//          )
+//        case Pass => Pass
+//      }
+//    }
   }
 
-  def sessionManagement(config: SessionConfig): HttpMiddleware =
-    Middleware { (request, service) =>
-      logger.debug(s"starting for ${request.method} ${request.uri}")
-      for {
-        sessionFromRequest <- sessionFromRequest(config, request)
-        requestWithSession = sessionFromRequest.cata(
-          session => request.withAttribute(requestAttr, session),
-          request
-        )
-        _ <- printRequestSessionKeys(requestWithSession.session2)
-        maybeResponse <- service(requestWithSession)
-        responseWithSession <- applySessionUpdates(config, sessionFromRequest, maybeResponse)
-        _ <- Task.delay { logger.debug(s"finishing for ${request.method} ${request.uri}") }
-      } yield responseWithSession
-    }
+  def sessionManagement(config: SessionConfig[IO]): HttpMiddleware[IO] =
+    ??? //  FIXME:
+//    Middleware { (request, service) =>
+//      logger.debug(s"starting for ${request.method} ${request.uri}")
+//      for {
+//        sessionFromRequest <- sessionFromRequest(config, request)
+//        requestWithSession = sessionFromRequest.cata(
+//          session => request.withAttribute(requestAttr, session),
+//          request
+//        )
+//        _ <- printRequestSessionKeys(requestWithSession.session2)
+//        maybeResponse <- service(requestWithSession)
+//        responseWithSession <- applySessionUpdates(config, sessionFromRequest, maybeResponse)
+//        _ <- Task.delay { logger.debug(s"finishing for ${request.method} ${request.uri}") }
+//      } yield responseWithSession
+//    }
 
-  def sessionRequired(fallback: Task[Response]): HttpMiddleware =
-    Middleware { (request, service) =>
-      import SessionSyntax._
-      OptionT(request.session).flatMapF(_ => service(request).map(_.toOption)).getOrElseF(fallback)
-    }
+  def sessionRequired(fallback: IO[Response[IO]]): HttpMiddleware[IO] =
+    ??? //  FIXME:
+//    Middleware { (request, service) =>
+//      import SessionSyntax._
+//      OptionT(request.session).flatMapF(_ => service(request).map(_.toOption)).getOrElseF(fallback)
+//    }
 
-  def printRequestSessionKeys(sessionOpt: Option[Session]): Task[Unit] =
-    Task.delay {
+  def printRequestSessionKeys(sessionOpt: Option[Session]): IO[Unit] =
+    IO.delay {
       sessionOpt match {
         case Some(session) => logger.debug("Request Session contains keys: " + session.asObject.map(_.toMap.keys.mkString(", ")))
         case None => logger.debug("Request Session empty")
