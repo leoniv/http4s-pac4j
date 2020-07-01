@@ -33,7 +33,7 @@ import cats.data.OptionT
 
 
 object JsonHelpers {
-  implicit val json: EntityDecoder[IO, Json] = ???//FIXME org.http4s.jawn.jawnDecoder(facade)
+  implicit val json: EntityDecoder[IO, Json] = org.http4s.jawn.jawnDecoder[IO, Json]
   def jsonOf[A](implicit decoder: Decoder[A]): EntityDecoder[IO, A] =
     json.flatMapR { json =>
       decoder.decodeJson(json).fold(
@@ -60,32 +60,15 @@ object Generators {
 }
 
 object Matchers {
-  type MaybeResponse = Response[IO]
   type Cookie = ResponseCookie
   import org.specs2.matcher.Matchers._
 
-//  def setCookies(mb: MaybeResponse): Vector[Cookie] = ??? //FIXME:
-//    mb match {
-//      case response: Response =>
-//        response.headers.collect {
-//          case `Set-Cookie`(setCookie) if setCookie.cookie.expires.forall(i => !i.toInstant.isBefore(Instant.now())) =>
-//            //        _ >= java.time.Instant.now()) =>
-//            setCookie.cookie
-//        }.toVector
-//      case Pass =>
-//        Vector.empty
-//    }
+  def isExpired(cookie: ResponseCookie): Boolean =
+    cookie.expires.forall(_.toInstant.isBefore(Instant.now()))
 
-  def expiredCookies(mb: MaybeResponse): Vector[Cookie] = ??? //FIXME
-//    mb match {
-//      case response: Response =>
-//        response.headers.collect {
-//          case `Set-Cookie`(setCookie) if setCookie.cookie.expires.exists(_.toInstant.isBefore(Instant.now())) =>
-//            setCookie.cookie
-//        }.toVector
-//      case Pass =>
-//        Vector.empty
-//    }
+  def freshCookies(resp: Response[IO]): List[Cookie] = resp.cookies.filter(! isExpired(_))
+
+  def expiredCookies(resp: Response[IO]): List[Cookie] = resp.cookies.filter(isExpired(_))
 
   def beCookieWithName(name: String): Matcher[Cookie] =
     be_===(name) ^^ ((_: Cookie).name)
@@ -93,27 +76,17 @@ object Matchers {
   def beCookieWhoseContentContains(subcontent: String): Matcher[Cookie] =
     contain(subcontent) ^^ ((_: Cookie).content)
 
-  def haveSetCookie(cookieName: String): Matcher[MaybeResponse] =
-    contain(beCookieWithName(cookieName)) ^^ { (r: MaybeResponse) => r.cookies }
+  def haveSetCookie(cookieName: String): Matcher[Response[IO]] =
+    contain(beCookieWithName(cookieName)) ^^ freshCookies _
 
-  def haveClearedCookie(cookieName: String): Matcher[MaybeResponse] =
+  def haveClearedCookie(cookieName: String): Matcher[Response[IO]] =
     contain(beCookieWithName(cookieName)) ^^ expiredCookies _
 
-  def haveStatus(status: Status): Matcher[MaybeResponse] = ??? //FIXME
-//    be_===(status) ^^ { f: MaybeResponse =>
-//      f match {
-//        case r: Response => r.status
-//        case Pass => ???
-//      }
-//    }
+  def haveStatus(status: Status): Matcher[Response[IO]] =
+    be_===(status) ^^ { (r: Response[IO]) => r.status }
 
-  def haveBody[A](a: A)(implicit d: EntityDecoder[IO, A]): Matcher[MaybeResponse] = ??? //FIXME
-//    be_===(a) ^^ { f: MaybeResponse =>
-//      f match {
-//        case r: Response => r.as[A].unsafeRun
-//        case Pass => ???
-//      }
-//    }
+  def haveBody[A](a: A)(implicit d: EntityDecoder[IO, A]): Matcher[Response[IO]] =
+    be_===(a) ^^ { (r: Response[IO]) => r.as[A].unsafeRunSync }
 }
 
 class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck with IOMatchers {
@@ -172,12 +145,12 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       "set a session cookie as per mkCookie" in {
         val request = Request[IO](Method.GET, uri"/create")
         // Explicitly uses unsafePerformSync to help with race
-        sut(request).map(_.cookies) must returnValue(contain(config.cookie(newSession.noSpaces)))
+        sut(request).map(freshCookies _) must returnValue(contain(config.cookie(newSession.noSpaces)))
       }
 
       "not include the session data in a readable form in the cookie" in {
         val request = Request[IO](Method.GET, uri"/create")
-        sut(request).map(_.cookies) must returnValue(not(contain(beCookieWhoseContentContains("created"))))
+        sut(request).map(freshCookies _) must returnValue(not(contain(beCookieWhoseContentContains("created"))))
       }
     }
 
@@ -233,7 +206,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
             .addCookie(cookie.toRequestCookie)
             .pure[IO]
           firstResponse <- sut(firstRequest)
-          cookies = firstResponse.cookies
+          cookies = freshCookies(firstResponse)
           secondRequest = cookies.foldLeft(
             Request[IO](Method.GET, uri"/read")
           )(
