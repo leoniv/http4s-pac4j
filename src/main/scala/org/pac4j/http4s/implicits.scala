@@ -1,5 +1,7 @@
 package org.pac4j.http4s
 
+import org.http4s.{ResponseCookie, RequestCookie}
+
 object implicits {
   implicit class OptionScalaz[A](oa: Option[A]) {
     def cata[X](some: (A) ⇒ X, none: ⇒ X): X = oa match {
@@ -8,5 +10,9 @@ object implicits {
     }
 
     def | (a: A): A = oa.getOrElse(a)
+  }
+
+  implicit class ResponseCookieOps(c: ResponseCookie) {
+    def toRequestCookie: RequestCookie = RequestCookie(c.name, c.content)
   }
 }

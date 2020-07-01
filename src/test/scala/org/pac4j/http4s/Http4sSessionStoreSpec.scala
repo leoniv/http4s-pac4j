@@ -4,7 +4,7 @@ import io.circe.{Json, JsonObject}
 import org.specs2.mutable.Specification
 import Http4sCookieSessionStore._
 
-object Http4sCookieSessionStoreSpec extends Specification {
+object Http4sCookieSessionStoreSpec extends Specification with Http4sCookieSessionStore {
   "get" should {
     "return null if no session" >> {
       get(None, "test") must beNone

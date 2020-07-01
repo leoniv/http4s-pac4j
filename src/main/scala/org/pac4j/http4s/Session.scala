@@ -125,13 +125,13 @@ final case class SessionConfig[F[_]: Sync](
     signMac.init(new SecretKeySpec(signKey, "HmacSHA256"))
     Base64.getEncoder.encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
   }
+//
+//  // FIXME: rename to `responseCookie`
+//  def cookie(content: String): F[ResponseCookie] =
+//    Sync[F].delay(cookie2(content))
 
   // FIXME: rename to `responseCookie`
-  def cookie(content: String): F[ResponseCookie] =
-    Sync[F].delay(cookie2(content))
-
-  // FIXME: rename to `responseCookie2`
-  def cookie2(content: String): ResponseCookie = {
+  def cookie(content: String): ResponseCookie = {
       val now = new Date().getTime / 1000
       val expires = now + maxAge.toSeconds
       val serialized = s"$expires-$content"
@@ -165,12 +165,12 @@ object Session {
   val requestAttr: IO[Key[Session]] = Key.newKey[IO, Session]
   val responseAttr: IO[Key[Option[Session] => Option[Session]]] =
     Key.newKey[IO, Option[Session] => Option[Session]]
+// FIXME
+//  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[Cookie] =
+//    config.cookie(session.noSpaces)
 
-  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[Cookie] =
+  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): Cookie =
     config.cookie(session.noSpaces)
-
-  private[this] def sessionAsCookie2(config: SessionConfig[IO], session: Session): Cookie =
-    config.cookie2(session.noSpaces)
 
   private[this] def checkSignature(config: SessionConfig[IO], cookie: RequestCookie): IO[Option[Session]] =
     config.check(cookie).map(_.flatMap(jawn.parse(_).toOption))
