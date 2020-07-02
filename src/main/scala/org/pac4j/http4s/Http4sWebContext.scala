@@ -36,8 +36,10 @@ class Http4sWebContext(
 
   case class Pac4jUserProfiles(pac4jUserProfiles: util.LinkedHashMap[String, CommonProfile])
 
-  val pac4jUserProfilesAttr: IO[Key[Pac4jUserProfiles]] = Key.newKey[IO, Pac4jUserProfiles]
-  val sessionIdAttr: IO[Key[String]] = Key.newKey[IO, String]
+  val pac4jUserProfilesAttr: Key[Pac4jUserProfiles] =
+    Key.newKey[IO, Pac4jUserProfiles].unsafeRunSync
+  val sessionIdAttr: Key[String] =
+    Key.newKey[IO, String].unsafeRunSync
 
   override def getSessionStore: SessionStore[Http4sWebContext] = sessionStore
 
@@ -63,9 +65,9 @@ class Http4sWebContext(
     logger.debug(s"getRequestAttribute: $name")
     name match {
       case "pac4jUserProfiles" =>
-        pac4jUserProfilesAttr.map(request.attributes.lookup(_).orNull).unsafeRunSync
+        request.attributes.lookup(pac4jUserProfilesAttr).orNull
       case Pac4jConstants.SESSION_ID =>
-        sessionIdAttr.map(request.attributes.lookup(_).orNull).unsafeRunSync
+          request.attributes.lookup(sessionIdAttr).orNull
       case _ =>
         throw new NotImplementedError(s"getRequestAttribute for $name not implemented")
     }
@@ -75,13 +77,9 @@ class Http4sWebContext(
     logger.debug(s"setRequestAttribute: $name")
     request = name match {
       case "pac4jUserProfiles" =>
-        pac4jUserProfilesAttr
-          .map(request.withAttribute(_, Pac4jUserProfiles(value.asInstanceOf[util.LinkedHashMap[String, CommonProfile]])))
-          .unsafeRunSync
+        request.withAttribute(pac4jUserProfilesAttr, Pac4jUserProfiles(value.asInstanceOf[util.LinkedHashMap[String, CommonProfile]]))
       case Pac4jConstants.SESSION_ID =>
-       sessionIdAttr
-          .map(request.withAttribute(_, value.asInstanceOf[String]))
-          .unsafeRunSync
+         request.withAttribute(sessionIdAttr, value.asInstanceOf[String])
       case _ =>
         throw new NotImplementedError(s"setRequestAttribute for $name not implemented")
     }

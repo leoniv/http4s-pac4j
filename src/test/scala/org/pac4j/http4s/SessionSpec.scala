@@ -141,6 +141,28 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }
     }
 
+    "FIXME" >> {
+      "encript/decript" >> {
+        config.cookie(newSession.noSpaces).flatMap(c =>
+          config.check(c.toRequestCookie)
+          ).unsafeRunSync must beSome(newSession.noSpaces)
+      }
+
+      "key eqals" >> {
+          Session.requestAttr must returnValue(be_===(Session.requestAttr.unsafeRunSync))
+      }
+
+      "requestWithSession" >> {
+        (for {
+          key <- Session.requestAttr
+          cookie <- config.cookie(newSession.noSpaces)
+          request = Request[IO]().addCookie(cookie.toRequestCookie)
+          sr <- Session.requestWithSession(config, request)
+          sessionFromAttr = sr._2.attributes.lookup(key)
+        } yield (sr._1, sessionFromAttr)) must returnValue((Some(newSession), Some(newSession)))
+      }
+    }
+
     "Creating a session" should {
       "set a session cookie as per mkCookie" in {
         val request = Request[IO](Method.GET, uri"/create")

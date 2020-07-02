@@ -147,22 +147,21 @@ final case class SessionConfig[F[_]: Sync](
        case _ => None
    }
 
-  private[this] def decrypt(cookie: RequestCookie): OptionT[F, String] =
-    for {
+  private[this] def decrypt(cookie: RequestCookie): F[Option[String]] =
+    (for {
       (signature, value) <- OptionT(Sync[F].pure(split2(cookie.content)))
       decrypted <- OptionT(cryptoManager.decrypt(value))
       _ <- OptionT(cryptoManager.checkSign(signature, decrypted))
-    } yield decrypted
+    } yield decrypted).value
 
-  def check(cookie: RequestCookie): OptionT[F, String] = {
+  def check(cookie: RequestCookie): F[Option[String]] = {
       val now = new Date().getTime / 1000
-
-      for {
-        decrypted <- decrypt(cookie)
+      (for {
+        decrypted <- OptionT(decrypt(cookie))
         (expires, content) <- OptionT(Sync[F].pure( split2(decrypted)))
         expiresSeconds <- OptionT(Sync[F].delay(Try(expires.toLong).toOption))
           if expiresSeconds > now
-      } yield content
+      } yield content).value
   }
 }
 
@@ -170,59 +169,70 @@ object Session {
   import implicits._
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  val requestAttr: IO[Key[Session]] = Key.newKey[IO, Session]
+  val requestAttr: IO[Key[Session]] = Key.newKey[IO, Session].unsafeRunSync.pure[IO]
   val responseAttr: IO[Key[Option[Session] => Option[Session]]] =
-    Key.newKey[IO, Option[Session] => Option[Session]]
+    Key.newKey[IO, Option[Session] => Option[Session]].unsafeRunSync.pure[IO]
 
   private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[ResponseCookie] =
     config.cookie(session.noSpaces)
 
-  private[this] def checkSignature(config: SessionConfig[IO], cookie: RequestCookie): OptionT[IO, Session] =
-    config.check(cookie).mapFilter(jawn.parse(_).toOption)
+  private[this] def checkSignature(
+    config: SessionConfig[IO],
+    cookie: RequestCookie
+  ): IO[Option[Session]] =
+    OptionT(config.check(cookie)).mapFilter(jawn.parse(_).toOption).value
 
-  private[this] def sessionFromRequest(config: SessionConfig[IO], request: Request[IO]): OptionT[IO, Session] =
+  private[this] def sessionFromRequest(
+      config: SessionConfig[IO],
+      request: Request[IO]
+    ): IO[Option[Session]] =
     (for {
       allCookies <- OptionT.liftF(IO.pure(request.cookies))
       sessionCookie <- OptionT(IO.pure(allCookies.find(_.name === config.cookieName)))
-      session <- checkSignature(config, sessionCookie)
-    } yield session)
+      session <- OptionT(checkSignature(config, sessionCookie))
+    } yield session).value
 
   private[this] def applySessionUpdates(
     config: SessionConfig[IO],
     sessionFromRequest: Option[Session],
-    serviceResponse: Response[IO]): Response[IO] = {
-    ??? //  FIXME:
-//    Task.delay {
-//      serviceResponse match {
-//        case response: Response =>
-//          val updateSession = response.attributes.get(responseAttr) | identity
-//          updateSession(sessionFromRequest).cata(
-//            session => {
-//              response.addCookie(sessionAsCookie(config, session))
-//            },
-//            if (sessionFromRequest.isDefined) response.removeCookie(config.cookieName) else response
-//          )
-//        case Pass => Pass
-//      }
-//    }
-  }
+    serviceResponse: Response[IO]): IO[Response[IO]] = for {
+      key <- responseAttr
+      updateSession = serviceResponse.attributes.lookup(key) | identity
+      sessionCookie <- updateSession(sessionFromRequest).map(sessionAsCookie(config, _)).sequence
+      response = sessionCookie.cata(
+          serviceResponse.addCookie(_),
+          if (sessionFromRequest.isDefined) serviceResponse.removeCookie(config.cookieName)
+          else serviceResponse
+      )
+  } yield response
+
+  private[this] def debug(mess: String): IO[Unit] =
+    IO.delay(println(s"FIXME: $mess"))//FIXME logger.debug(mess))
+
+  def requestWithSession(config: SessionConfig[IO], request: Request[IO]): IO[(Option[Session], Request[IO])] =
+    for {
+      key <- requestAttr
+      session <- sessionFromRequest(config, request)
+      requestWithSession = session.cata(
+          request.withAttribute(key, _),
+          request
+        )
+    } yield (session, requestWithSession)
 
   def sessionManagement(config: SessionConfig[IO]): HttpMiddleware[IO] =
-    ??? //  FIXME:
-//    Middleware { (request, service) =>
-//      logger.debug(s"starting for ${request.method} ${request.uri}")
-//      for {
-//        sessionFromRequest <- sessionFromRequest(config, request)
-//        requestWithSession = sessionFromRequest.cata(
-//          session => request.withAttribute(requestAttr, session),
-//          request
-//        )
-//        _ <- printRequestSessionKeys(requestWithSession.session2)
-//        maybeResponse <- service(requestWithSession)
-//        responseWithSession <- applySessionUpdates(config, sessionFromRequest, maybeResponse)
-//        _ <- Task.delay { logger.debug(s"finishing for ${request.method} ${request.uri}") }
-//      } yield responseWithSession
-//    }
+    Middleware { (request, service) =>
+      for {
+        key <- OptionT.liftF(requestAttr)
+        _ <- OptionT.liftF(debug(s"starting for ${request.method} ${request.uri}"))
+        (sessionFromRequest, requestWithSession) <- OptionT.liftF(requestWithSession(config, request))
+        _ <- OptionT.liftF(printRequestSessionKeys(sessionFromRequest))
+        response <- service(requestWithSession)
+        responseWithSession <- OptionT.liftF(
+          applySessionUpdates(config, sessionFromRequest, response)
+        )
+        _ <- OptionT.liftF(debug(s"finishing for ${request.method} ${request.uri}"))
+      } yield responseWithSession
+    }
 
   def sessionRequired(fallback: IO[Response[IO]]): HttpMiddleware[IO] =
     Middleware { (request, service) =>
@@ -230,11 +240,9 @@ object Session {
       OptionT(request.session).flatMap(_ => service(request)).orElse(OptionT.liftF(fallback))
     }
 
-  def printRequestSessionKeys(sessionOpt: Option[Session]): IO[Unit] =
-    IO.delay {
-      sessionOpt match {
-        case Some(session) => logger.debug("Request Session contains keys: " + session.asObject.map(_.toMap.keys.mkString(", ")))
-        case None => logger.debug("Request Session empty")
-      }
+  private[this] def printRequestSessionKeys(sessionOpt: Option[Session]) =
+     sessionOpt match {
+        case Some(session) => debug("Request Session contains keys: " + session.asObject.map(_.toMap.keys.mkString(", ")))
+        case None => debug("Request Session empty")
     }
 }
