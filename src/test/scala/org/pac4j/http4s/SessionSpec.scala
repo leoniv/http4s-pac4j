@@ -146,7 +146,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       "set a session cookie as per mkCookie" in prop { session: Session =>
         val request = Request[IO](Method.GET, uri"/create")
         sut(request).map(setCookies _) must
-          returnValue(contain(config.cookie(newSession.noSpaces).unsafeRunSync))
+          returnValue(contain(beCookieWithName(config.cookieName)))
       }
 
       "not include the session data in a readable form in the cookie" in {
