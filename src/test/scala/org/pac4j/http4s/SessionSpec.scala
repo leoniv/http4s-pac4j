@@ -54,7 +54,7 @@ object JsonHelpers {
 object Generators {
   implicit def arbSession: Arbitrary[Session] =
     Arbitrary(for {
-      string <- Gen.alphaStr
+      string <- arbitrary[String]
       number <- arbitrary[Int]
     } yield Json.obj("string" -> string.asJson, "number" -> number.asJson))
 }
@@ -63,12 +63,13 @@ object Matchers {
   type Cookie = ResponseCookie
   import org.specs2.matcher.Matchers._
 
-  def isExpired(cookie: ResponseCookie): Boolean =
-    cookie.expires.map(_.toInstant.isBefore(Instant.now())).getOrElse(false)
+  def setCookies(resp: Response[IO]): List[Cookie] = resp
+    .cookies
+    .filter(_.expires.forall(i => !i.toInstant.isBefore(Instant.now())))
 
-  def freshCookies(resp: Response[IO]): List[Cookie] = resp.cookies.filter(! isExpired(_))
-
-  def expiredCookies(resp: Response[IO]): List[Cookie] = resp.cookies.filter(isExpired(_))
+  def expiredCookies(resp: Response[IO]): List[Cookie] = resp
+    .cookies
+    .filter(_.expires.exists(_.toInstant.isBefore(Instant.now())))
 
   def beCookieWithName(name: String): Matcher[Cookie] =
     be_===(name) ^^ ((_: Cookie).name)
@@ -77,7 +78,7 @@ object Matchers {
     contain(subcontent) ^^ ((_: Cookie).content)
 
   def haveSetCookie(cookieName: String): Matcher[Response[IO]] =
-    contain(beCookieWithName(cookieName)) ^^ freshCookies _
+    contain(beCookieWithName(cookieName)) ^^ setCookies _
 
   def haveClearedCookie(cookieName: String): Matcher[Response[IO]] =
     contain(beCookieWithName(cookieName)) ^^ expiredCookies _
@@ -141,56 +142,16 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }
     }
 
-    "FIXME" >> {
-      "encript/decript" >> {
-        config.cookie(newSession.noSpaces).flatMap(c =>
-          config.check(c.toRequestCookie)
-          ).unsafeRunSync must beSome(newSession.noSpaces)
-      }
-
-//      "applySessionUpdates 1" >> {
-//        val sessionFromRequest = Json.obj("old" -> true.asJson)
-//         (for {
-//          resp <- Response[IO]().addCookie(ResponseCookie(config.cookieName, "bar")).clearSession
-//          resp <- Session.applySessionUpdates(config, Some(sessionFromRequest), resp)
-//         } yield resp).map(freshCookies _) must
-//         returnValue(not(contain(ResponseCookie(config.cookieName, "bar"))))
-//      }
-
-//      "applySessionUpdates 2" >> {
-//        val sessionFromRequest = Json.obj("old" -> true.asJson)
-//         (for {
-//          resp <- Response[IO]().newSession(newSession)
-//          resp <- Session.applySessionUpdates(config, Some(sessionFromRequest), resp)
-//         } yield resp).map(_.cookies) must
-//         returnValue(contain(config.cookie(newSession.noSpaces).unsafeRunSync))
-//      }
-
-      "key eqals" >> {
-          Session.requestAttr must returnValue(be_===(Session.requestAttr.unsafeRunSync))
-      }
-//
-//      "requestWithSession" >> {
-//        (for {
-//          key <- Session.requestAttr
-//          cookie <- config.cookie(newSession.noSpaces)
-//          request = Request[IO]().addCookie(cookie.toRequestCookie)
-//          sr <- Session.requestWithSession(config, request)
-//          sessionFromAttr = sr._2.attributes.lookup(key)
-//        } yield (sr._1, sessionFromAttr)) must returnValue((Some(newSession), Some(newSession)))
-//      }
-    }
-
     "Creating a session" should {
-      "set a session cookie as per mkCookie" in {
+      "set a session cookie as per mkCookie" in prop { session: Session =>
         val request = Request[IO](Method.GET, uri"/create")
-        sut(request).map(freshCookies _) must
+        sut(request).map(setCookies _) must
           returnValue(contain(config.cookie(newSession.noSpaces).unsafeRunSync))
       }
 
       "not include the session data in a readable form in the cookie" in {
         val request = Request[IO](Method.GET, uri"/create")
-        sut(request).map(freshCookies _) must
+        sut(request).map(setCookies _) must
           returnValue(not(contain(beCookieWhoseContentContains("created"))))
       }
     }
@@ -199,8 +160,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       "clear session cookie when one is set" in prop { session: Session =>
         config.cookie(session.noSpaces).map(cookie =>
           Request[IO](Method.GET, uri"/clear").addCookie(cookie.toRequestCookie)
-        ).flatMap(sut(_)) must
-          returnValue(haveClearedCookie(config.cookieName))
+        ).flatMap(sut(_)) must returnValue(haveClearedCookie(config.cookieName))
       }
 
       "do nothing when one is not set" in {
@@ -234,7 +194,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       "read the session when it exists" in prop { session: Session =>
         config.cookie(session.noSpaces).map(cookie =>
           Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
-        ).flatMap(sut(_)) must returnValue(haveBody(session))
+        ).flatMap(sut(_)) must returnValue(haveStatus(Status.Ok) and haveBody(session))
       }
     }
 
@@ -248,7 +208,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
             .addCookie(cookie.toRequestCookie)
             .pure[IO]
           firstResponse <- sut(firstRequest)
-          cookies = freshCookies(firstResponse)
+          cookies = setCookies(firstResponse)
           secondRequest = cookies.foldLeft(
             Request[IO](Method.GET, uri"/read")
           )(

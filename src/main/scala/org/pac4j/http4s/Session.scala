@@ -27,8 +27,6 @@ import scala.util.Try
  * @author Iain Cardnell
  */
 
-
-
 object SessionSyntax {
   import implicits._
   implicit final class RequestOps(val v: Request[IO]) extends AnyVal {
@@ -141,15 +139,15 @@ final case class SessionConfig[F[_]: Sync](
       } yield mkCookie(cookieName, s"$signed-$encrypted")
     }
 
-   private[this] def split2(str: String): Option[(String, String)] =
-     str.split('-') match {
+  private[this] def split2(split: => Array[String]): Option[(String, String)] =
+     split match {
        case Array(signature, value) => (signature, value).some
        case _ => None
    }
 
   private[this] def decrypt(cookie: RequestCookie): F[Option[String]] =
     (for {
-      (signature, value) <- OptionT(Sync[F].pure(split2(cookie.content)))
+      (signature, value) <- OptionT(Sync[F].pure(split2(cookie.content.split('-'))))
       decrypted <- OptionT(cryptoManager.decrypt(value))
       _ <- OptionT(cryptoManager.checkSign(signature, decrypted))
     } yield decrypted).value
@@ -158,7 +156,7 @@ final case class SessionConfig[F[_]: Sync](
       val now = new Date().getTime / 1000
       (for {
         decrypted <- OptionT(decrypt(cookie))
-        (expires, content) <- OptionT(Sync[F].pure( split2(decrypted)))
+        (expires, content) <- OptionT(Sync[F].pure( split2(decrypted.split("-", 2))))
         expiresSeconds <- OptionT(Sync[F].delay(Try(expires.toLong).toOption))
           if expiresSeconds > now
       } yield content).value
@@ -187,8 +185,7 @@ object Session {
       request: Request[IO]
     ): IO[Option[Session]] =
     (for {
-      allCookies <- OptionT.liftF(IO.pure(request.cookies))
-      sessionCookie <- OptionT(IO.pure(allCookies.find(_.name === config.cookieName)))
+      sessionCookie <- OptionT(IO.pure(request.cookies.find(_.name === config.cookieName)))
       session <- OptionT(checkSignature(config, sessionCookie))
     } yield session).value
 
