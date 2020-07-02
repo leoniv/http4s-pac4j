@@ -11,7 +11,7 @@ inThisBuild(
   )
 )
 
-lazy val lib = project
+lazy val pack4jLib = project
   .in(file("."))
   .settings(
     libraryDependencies ++= Seq(
@@ -35,7 +35,7 @@ lazy val lib = project
     )
   )
 
-lazy val example = project
+lazy val pack4jExample = project
   .in(file("example"))
   .settings(
     libraryDependencies ++= Seq(
@@ -43,7 +43,6 @@ lazy val example = project
       Deps.http4sServer,
       Deps.pack4j,
       Deps.cats,
-      Deps.catsEffect
+      Deps.catsEffect,
     )
-  )
-  .dependsOn(lib)
+  ).dependsOn(pack4jLib)
