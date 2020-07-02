@@ -112,20 +112,20 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
             Ok()
 
           case GET -> Root / "create" =>
-            Ok().flatMap(_.newSession(newSession))
+            Ok().map(_.newSession(newSession))
 
           case GET -> Root / "clear" =>
-            Ok().flatMap(_.clearSession)
+            Ok().map(_.clearSession)
 
           case req@GET -> Root / "read" =>
             for {
-              session <- req.session
+              session <- req.session.pure[IO]
               response <- session.cata(Ok(_), NotFound())
             } yield response
 
           case GET -> Root / "modify" =>
             val _number = jsonObject ^|-> at[JsonObject, String, Option[Json]]("number") ^<-? Monocle.some ^<-? jsonInt
-            Ok().flatMap(_.modifySession(_number.modify(_ + 1)))
+            Ok().map(_.modifySession(_number.modify(_ + 1)))
         }
       ).orNotFound
 

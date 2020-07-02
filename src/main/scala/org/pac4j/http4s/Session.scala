@@ -30,32 +30,27 @@ import scala.util.Try
 object SessionSyntax {
   import implicits._
   implicit final class RequestOps(val v: Request[IO]) extends AnyVal {
-    def session: IO[Option[Session]] =
-      Session.requestAttr.map(v.attributes.lookup(_))
+    def session: Option[Session] = v.attributes.lookup(Session.requestAttr)
   }
 
   implicit final class ResponseOps(val v: Response[IO]) extends AnyVal {
-    def clearSession: IO[Response[IO]] =
-      Session.responseAttr.map(v.withAttribute(_, (_: Option[Session]) => None))
+    def clearSession: Response[IO] =
+      v.withAttribute(Session.responseAttr, (_: Option[Session]) => None)
 
-    def modifySession(f: Session => Session): IO[Response[IO]] = {
+    def modifySession(f: Session => Session):  Response[IO] = {
       val lf: Option[Session] => Option[Session] = _.cata(f.andThen(_.some), None)
-      Session.responseAttr.map { key =>
-        v.withAttribute(key ,v.attributes.lookup(key).cata(_.andThen(lf), lf))
-      }
+      v.withAttribute(Session.responseAttr,
+        v.attributes.lookup(Session.responseAttr).cata(_.andThen(lf), lf))
     }
 
-    def newOrModifySession(f: Option[Session] => Session): IO[Response[IO]] = {
+    def newOrModifySession(f: Option[Session] => Session): Response[IO] = {
       val lf: Option[Session] => Option[Session] = f.andThen(_.some)
-      Session.responseAttr.map { key =>
-        v.withAttribute(key ,v.attributes.lookup(key).cata(_.andThen(lf), lf))
-      }
+        v.withAttribute(Session.responseAttr,
+          v.attributes.lookup(Session.responseAttr).cata(_.andThen(lf), lf))
     }
 
-    def newSession(session: Session): IO[Response[IO]] =
-      Session.responseAttr.map { key =>
-        v.withAttribute(key, (_: Option[Session]) => Some(session))
-      }
+    def newSession(session: Session): Response[IO] =
+        v.withAttribute(Session.responseAttr, (_: Option[Session]) => Some(session))
   }
 }
 
@@ -167,9 +162,9 @@ object Session {
   import implicits._
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  val requestAttr: IO[Key[Session]] = Key.newKey[IO, Session].unsafeRunSync.pure[IO]
-  val responseAttr: IO[Key[Option[Session] => Option[Session]]] =
-    Key.newKey[IO, Option[Session] => Option[Session]].unsafeRunSync.pure[IO]
+  val requestAttr: Key[Session] = Key.newKey[IO, Session].unsafeRunSync
+  val responseAttr: Key[Option[Session] => Option[Session]] =
+    Key.newKey[IO, Option[Session] => Option[Session]].unsafeRunSync
 
   private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[ResponseCookie] =
     config.cookie(session.noSpaces)
@@ -194,10 +189,9 @@ object Session {
 
   private[this] def requestWithSession(config: SessionConfig[IO], request: Request[IO]): IO[(Option[Session], Request[IO])] =
     for {
-      key <- requestAttr
       session <- sessionFromRequest(config, request)
       requestWithSession = session.cata(
-          request.withAttribute(key, _),
+          request.withAttribute(requestAttr, _),
           request
         )
     } yield (session, requestWithSession)
@@ -205,15 +199,17 @@ object Session {
   def applySessionUpdates(
     config: SessionConfig[IO],
     sessionFromRequest: Option[Session],
-    response: Response[IO]): IO[Response[IO]] = for {
-      key <- responseAttr
-      updateSession = response.attributes.lookup(key) | identity
-      sessionCookie <- updateSession(sessionFromRequest).map(sessionAsCookie(config, _)).sequence
-  } yield sessionCookie.cata(
+    response: Response[IO]): IO[Response[IO]] = {
+      val updateSession = response.attributes.lookup(responseAttr) | identity
+      updateSession(sessionFromRequest).map(sessionAsCookie(config, _))
+        .sequence
+        .map(_.cata(
           response.addCookie(_),
           if (sessionFromRequest.isDefined) response.removeCookie(config.cookieName)
           else response
+          )
         )
+  }
 
   def sessionManagement(config: SessionConfig[IO]): HttpMiddleware[IO] =
     Middleware { (request, service) =>
@@ -232,7 +228,9 @@ object Session {
   def sessionRequired(fallback: IO[Response[IO]]): HttpMiddleware[IO] =
     Middleware { (request, service) =>
       import SessionSyntax._
-      OptionT(request.session).flatMap(_ => service(request)).orElse(OptionT.liftF(fallback))
+      OptionT(request.session.pure[IO])
+        .flatMap(_ => service(request))
+        .orElse(OptionT.liftF(fallback))
     }
 
   private[this] def printRequestSessionKeys(sessionOpt: Option[Session]) =
