@@ -64,7 +64,7 @@ object Matchers {
   import org.specs2.matcher.Matchers._
 
   def isExpired(cookie: ResponseCookie): Boolean =
-    cookie.expires.forall(_.toInstant.isBefore(Instant.now()))
+    cookie.expires.map(_.toInstant.isBefore(Instant.now())).getOrElse(false)
 
   def freshCookies(resp: Response[IO]): List[Cookie] = resp.cookies.filter(! isExpired(_))
 
@@ -148,19 +148,37 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
           ).unsafeRunSync must beSome(newSession.noSpaces)
       }
 
+//      "applySessionUpdates 1" >> {
+//        val sessionFromRequest = Json.obj("old" -> true.asJson)
+//         (for {
+//          resp <- Response[IO]().addCookie(ResponseCookie(config.cookieName, "bar")).clearSession
+//          resp <- Session.applySessionUpdates(config, Some(sessionFromRequest), resp)
+//         } yield resp).map(freshCookies _) must
+//         returnValue(not(contain(ResponseCookie(config.cookieName, "bar"))))
+//      }
+
+//      "applySessionUpdates 2" >> {
+//        val sessionFromRequest = Json.obj("old" -> true.asJson)
+//         (for {
+//          resp <- Response[IO]().newSession(newSession)
+//          resp <- Session.applySessionUpdates(config, Some(sessionFromRequest), resp)
+//         } yield resp).map(_.cookies) must
+//         returnValue(contain(config.cookie(newSession.noSpaces).unsafeRunSync))
+//      }
+
       "key eqals" >> {
           Session.requestAttr must returnValue(be_===(Session.requestAttr.unsafeRunSync))
       }
-
-      "requestWithSession" >> {
-        (for {
-          key <- Session.requestAttr
-          cookie <- config.cookie(newSession.noSpaces)
-          request = Request[IO]().addCookie(cookie.toRequestCookie)
-          sr <- Session.requestWithSession(config, request)
-          sessionFromAttr = sr._2.attributes.lookup(key)
-        } yield (sr._1, sessionFromAttr)) must returnValue((Some(newSession), Some(newSession)))
-      }
+//
+//      "requestWithSession" >> {
+//        (for {
+//          key <- Session.requestAttr
+//          cookie <- config.cookie(newSession.noSpaces)
+//          request = Request[IO]().addCookie(cookie.toRequestCookie)
+//          sr <- Session.requestWithSession(config, request)
+//          sessionFromAttr = sr._2.attributes.lookup(key)
+//        } yield (sr._1, sessionFromAttr)) must returnValue((Some(newSession), Some(newSession)))
+//      }
     }
 
     "Creating a session" should {

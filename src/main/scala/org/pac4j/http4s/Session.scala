@@ -192,24 +192,10 @@ object Session {
       session <- OptionT(checkSignature(config, sessionCookie))
     } yield session).value
 
-  private[this] def applySessionUpdates(
-    config: SessionConfig[IO],
-    sessionFromRequest: Option[Session],
-    serviceResponse: Response[IO]): IO[Response[IO]] = for {
-      key <- responseAttr
-      updateSession = serviceResponse.attributes.lookup(key) | identity
-      sessionCookie <- updateSession(sessionFromRequest).map(sessionAsCookie(config, _)).sequence
-      response = sessionCookie.cata(
-          serviceResponse.addCookie(_),
-          if (sessionFromRequest.isDefined) serviceResponse.removeCookie(config.cookieName)
-          else serviceResponse
-      )
-  } yield response
-
   private[this] def debug(mess: String): IO[Unit] =
-    IO.delay(println(s"FIXME: $mess"))//FIXME logger.debug(mess))
+    IO.delay(logger.debug(mess))
 
-  def requestWithSession(config: SessionConfig[IO], request: Request[IO]): IO[(Option[Session], Request[IO])] =
+  private[this] def requestWithSession(config: SessionConfig[IO], request: Request[IO]): IO[(Option[Session], Request[IO])] =
     for {
       key <- requestAttr
       session <- sessionFromRequest(config, request)
@@ -219,10 +205,22 @@ object Session {
         )
     } yield (session, requestWithSession)
 
+  def applySessionUpdates(
+    config: SessionConfig[IO],
+    sessionFromRequest: Option[Session],
+    response: Response[IO]): IO[Response[IO]] = for {
+      key <- responseAttr
+      updateSession = response.attributes.lookup(key) | identity
+      sessionCookie <- updateSession(sessionFromRequest).map(sessionAsCookie(config, _)).sequence
+  } yield sessionCookie.cata(
+          response.addCookie(_),
+          if (sessionFromRequest.isDefined) response.removeCookie(config.cookieName)
+          else response
+        )
+
   def sessionManagement(config: SessionConfig[IO]): HttpMiddleware[IO] =
     Middleware { (request, service) =>
       for {
-        key <- OptionT.liftF(requestAttr)
         _ <- OptionT.liftF(debug(s"starting for ${request.method} ${request.uri}"))
         (sessionFromRequest, requestWithSession) <- OptionT.liftF(requestWithSession(config, request))
         _ <- OptionT.liftF(printRequestSessionKeys(sessionFromRequest))
