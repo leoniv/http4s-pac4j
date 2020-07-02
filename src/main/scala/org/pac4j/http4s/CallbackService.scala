@@ -15,23 +15,30 @@ import org.pac4j.core.http.adapter.HttpActionAdapter
   *
   * @author Iain Cardnell
   */
-class CallbackService(config: Config,
-                      defaultUrl: Option[String] = None,
-                      saveInSession: Boolean = true,
-                      multiProfile: Boolean = false,
-                      renewSession: Boolean = true,
-                      defaultClient: Option[String] = None) {
+class CallbackService(
+  config: Config,
+  defaultUrl: Option[String] = None,
+  saveInSession: Boolean = true,
+  multiProfile: Boolean = false,
+  renewSession: Boolean = true,
+  defaultClient: Option[String] = None
+) {
 
   def login(request: Request[IO]): IO[Response[IO]] = {
-    val callbackLogic = new DefaultCallbackLogic[IO[Response[IO]], Http4sWebContext]()
+    val callbackLogic =
+      new DefaultCallbackLogic[IO[Response[IO]], Http4sWebContext]()
     val webContext = Http4sWebContext(request, config)
-    callbackLogic.perform(webContext,
+    callbackLogic.perform(
+      webContext,
       config,
-      config.getHttpActionAdapter.asInstanceOf[HttpActionAdapter[IO[Response[IO]], Http4sWebContext]],
+      config.getHttpActionAdapter.asInstanceOf[HttpActionAdapter[IO[
+        Response[IO]
+      ], Http4sWebContext]],
       this.defaultUrl.orNull,
       this.saveInSession,
       this.multiProfile,
       this.renewSession,
-      this.defaultClient.orNull)
+      this.defaultClient.orNull
+    )
   }
 }

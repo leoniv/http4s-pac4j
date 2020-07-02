@@ -10,16 +10,24 @@ import org.pac4j.core.http.adapter.HttpActionAdapter
   *
   * @author Iain Cardnell
   */
-final case class DefaultHttpActionAdapter() extends HttpActionAdapter[IO[Response[IO]], Http4sWebContext] {
-  override def adapt(code: Int, context: Http4sWebContext): IO[Response[IO]] = {
+final case class DefaultHttpActionAdapter()
+    extends HttpActionAdapter[IO[Response[IO]], Http4sWebContext] {
+  override def adapt(
+    code: Int,
+    context: Http4sWebContext
+  ): IO[Response[IO]] =
     IO.delay {
       code match {
-        case HttpConstants.UNAUTHORIZED => context.setResponseStatus(Status.Unauthorized.code)
-        case HttpConstants.FORBIDDEN => context.setResponseStatus(Status.Forbidden.code)
-        case HttpConstants.OK => context.setResponseStatus(Status.Ok.code)
-        case HttpConstants.NO_CONTENT => context.setResponseStatus(Status.NoContent.code)
-        case HttpConstants.TEMP_REDIRECT => context.setResponseStatus(Status.Found.code)
+        case HttpConstants.UNAUTHORIZED =>
+          context.setResponseStatus(Status.Unauthorized.code)
+        case HttpConstants.FORBIDDEN =>
+          context.setResponseStatus(Status.Forbidden.code)
+        case HttpConstants.OK =>
+          context.setResponseStatus(Status.Ok.code)
+        case HttpConstants.NO_CONTENT =>
+          context.setResponseStatus(Status.NoContent.code)
+        case HttpConstants.TEMP_REDIRECT =>
+          context.setResponseStatus(Status.Found.code)
       }
     }.as(context.getResponse)
-  }
 }

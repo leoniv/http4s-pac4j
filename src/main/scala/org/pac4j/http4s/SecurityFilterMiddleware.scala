@@ -25,12 +25,11 @@ import cats.data.OptionT
 class DefaultSecurityGrantedAccessAdapter(service: HttpRoutes[IO])
     extends SecurityGrantedAccessAdapter[IO[Response[IO]], Http4sWebContext] {
   override def adapt(
-      context: Http4sWebContext,
-      profiles: util.Collection[CommonProfile],
-      parameters: AnyRef*
-  ): IO[Response[IO]] = {
+    context: Http4sWebContext,
+    profiles: util.Collection[CommonProfile],
+    parameters: AnyRef*
+  ): IO[Response[IO]] =
     service.orNotFound(context.getRequest)
-  }
 }
 
 /**
@@ -42,15 +41,15 @@ class DefaultSecurityGrantedAccessAdapter(service: HttpRoutes[IO])
 final case class SecurityFilterMiddleware() {
 
   def securityFilter(
-      config: Config,
-      clients: Option[String] = None,
-      authorizers: Option[String] = None,
-      matchers: Option[String] = None,
-      multiProfile: Boolean = false,
-      securityGrantedAccessAdapter: HttpRoutes[IO] => SecurityGrantedAccessAdapter[
-        IO[Response[IO]],
-        Http4sWebContext
-      ] = new DefaultSecurityGrantedAccessAdapter(_)
+    config: Config,
+    clients: Option[String] = None,
+    authorizers: Option[String] = None,
+    matchers: Option[String] = None,
+    multiProfile: Boolean = false,
+    securityGrantedAccessAdapter: HttpRoutes[IO] => SecurityGrantedAccessAdapter[
+      IO[Response[IO]],
+      Http4sWebContext
+    ] = new DefaultSecurityGrantedAccessAdapter(_)
   ): HttpMiddleware[IO] =
     Middleware { (request, service) =>
       val securityLogic =
@@ -61,8 +60,9 @@ final case class SecurityFilterMiddleware() {
           context,
           config,
           securityGrantedAccessAdapter(service),
-          config.getHttpActionAdapter
-            .asInstanceOf[HttpActionAdapter[IO[Response[IO]], Http4sWebContext]],
+          config.getHttpActionAdapter.asInstanceOf[
+            HttpActionAdapter[IO[Response[IO]], Http4sWebContext]
+          ],
           clients.orNull,
           authorizers.orNull,
           matchers.orNull,

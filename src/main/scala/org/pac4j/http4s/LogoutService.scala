@@ -11,23 +11,30 @@ import org.pac4j.core.http.adapter.HttpActionAdapter
   *
   * @author Iain Cardnell
   */
-class LogoutService(config: Config,
-                    defaultUrl: Option[String] = None,
-                    logoutUrlPattern: Option[String] = None,
-                    localLogout: Boolean = true,
-                    destroySession: Boolean = false,
-                    centralLogout: Boolean = false) {
+class LogoutService(
+  config: Config,
+  defaultUrl: Option[String] = None,
+  logoutUrlPattern: Option[String] = None,
+  localLogout: Boolean = true,
+  destroySession: Boolean = false,
+  centralLogout: Boolean = false
+) {
 
   def logout(request: Request[IO]): IO[Response[IO]] = {
-    val logoutLogic = new DefaultLogoutLogic[IO[Response[IO]], Http4sWebContext]()
+    val logoutLogic =
+      new DefaultLogoutLogic[IO[Response[IO]], Http4sWebContext]()
     val webContext = Http4sWebContext(request, config)
-    logoutLogic.perform(webContext,
+    logoutLogic.perform(
+      webContext,
       config,
-      config.getHttpActionAdapter.asInstanceOf[HttpActionAdapter[IO[Response[IO]], Http4sWebContext]],
+      config.getHttpActionAdapter.asInstanceOf[HttpActionAdapter[IO[
+        Response[IO]
+      ], Http4sWebContext]],
       this.defaultUrl.orNull,
       this.logoutUrlPattern.orNull,
       this.localLogout,
       this.destroySession,
-      this.centralLogout)
+      this.centralLogout
+    )
   }
 }

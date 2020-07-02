@@ -22,13 +22,19 @@ import scala.collection.JavaConverters._
 class Http4sCacheSessionStore extends SessionStore[Http4sWebContext] {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  private val cache = scala.collection.mutable.Map[String, Map[String, AnyRef]]()
+  private val cache =
+    scala.collection.mutable.Map[String, Map[String, AnyRef]]()
 
-  override def getOrCreateSessionId(context: Http4sWebContext): String = {
-    val id = Option(context.getRequestAttribute(Pac4jConstants.SESSION_ID)) match {
+  override def getOrCreateSessionId(
+    context: Http4sWebContext
+  ): String = {
+    val id = Option(
+      context.getRequestAttribute(Pac4jConstants.SESSION_ID)
+    ) match {
       case Some(sessionId) => sessionId.toString
       case None =>
-        context.getRequestCookies.asScala.find(_.getName == Pac4jConstants.SESSION_ID) match {
+        context.getRequestCookies.asScala
+          .find(_.getName == Pac4jConstants.SESSION_ID) match {
           case Some(cookie) => cookie.getValue
           case None => createSessionId(context)
         }
@@ -46,7 +52,10 @@ class Http4sCacheSessionStore extends SessionStore[Http4sWebContext] {
     id
   }
 
-  override def get(context: Http4sWebContext, key: String): AnyRef = {
+  override def get(
+    context: Http4sWebContext,
+    key: String
+  ): AnyRef = {
     val sessionId = getOrCreateSessionId(context)
     val sessionMap = cache.getOrElseUpdate(sessionId, Map.empty)
     val value = sessionMap.get(key).orNull
@@ -54,7 +63,11 @@ class Http4sCacheSessionStore extends SessionStore[Http4sWebContext] {
     value
   }
 
-  override def set(context: Http4sWebContext, key: String, value: AnyRef): Unit = {
+  override def set(
+    context: Http4sWebContext,
+    key: String,
+    value: AnyRef
+  ): Unit = {
     val sessionId = getOrCreateSessionId(context)
     logger.debug(s"set sessionId: $sessionId key: $key")
     val sessionMap = cache.getOrElseUpdate(sessionId, Map.empty)
@@ -78,13 +91,21 @@ class Http4sCacheSessionStore extends SessionStore[Http4sWebContext] {
     }
   }
 
-  override def getTrackableSession(context: Http4sWebContext): AnyRef = {
+  override def getTrackableSession(
+    context: Http4sWebContext
+  ): AnyRef = {
     logger.debug(s"getTrackableSession")
     getOrCreateSessionId(context)
   }
 
-  override def buildFromTrackableSession(context: Http4sWebContext, trackableSession: Any): SessionStore[Http4sWebContext] = {
-    context.setRequestAttribute(Pac4jConstants.SESSION_ID, trackableSession.toString)
+  override def buildFromTrackableSession(
+    context: Http4sWebContext,
+    trackableSession: Any
+  ): SessionStore[Http4sWebContext] = {
+    context.setRequestAttribute(
+      Pac4jConstants.SESSION_ID,
+      trackableSession.toString
+    )
     this
   }
 

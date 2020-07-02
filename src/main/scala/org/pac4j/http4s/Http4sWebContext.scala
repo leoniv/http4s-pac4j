@@ -27,36 +27,51 @@ import scala.collection.JavaConverters._
   * @author Iain Cardnell
   */
 class Http4sWebContext(
-    private var request: Request[IO],
-    private val sessionStore: SessionStore[Http4sWebContext],
-  ) extends WebContext {
+  private var request: Request[IO],
+  private val sessionStore: SessionStore[Http4sWebContext]
+) extends WebContext {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
   private var response: Response[IO] = Response()
 
-  case class Pac4jUserProfiles(pac4jUserProfiles: util.LinkedHashMap[String, CommonProfile])
+  case class Pac4jUserProfiles(
+    pac4jUserProfiles: util.LinkedHashMap[String, CommonProfile]
+  )
 
   val pac4jUserProfilesAttr: Key[Pac4jUserProfiles] =
     Key.newKey[IO, Pac4jUserProfiles].unsafeRunSync
   val sessionIdAttr: Key[String] =
     Key.newKey[IO, String].unsafeRunSync
 
-  override def getSessionStore: SessionStore[Http4sWebContext] = sessionStore
+  override def getSessionStore: SessionStore[Http4sWebContext] =
+    sessionStore
 
-  override def getRequestParameter(name: String): String = {
-    if (request.contentType.contains(`Content-Type`(MediaType.application.`x-www-form-urlencoded`))) {
-      logger.debug(s"getRequestParameter: Getting from Url Encoded Form name=$name")
+  override def getRequestParameter(name: String): String =
+    if (request.contentType.contains(
+          `Content-Type`(
+            MediaType.application.`x-www-form-urlencoded`
+          )
+        )) {
+      logger.debug(
+        s"getRequestParameter: Getting from Url Encoded Form name=$name"
+      )
       UrlForm.decodeString(Charset.`UTF-8`)(getRequestContent) match {
         case Left(err) => throw new Exception(err.toString)
-        case Right(urlForm) => urlForm.getFirstOrElse(name, request.params.get(name).orNull)
+        case Right(urlForm) =>
+          urlForm.getFirstOrElse(
+            name,
+            request.params.get(name).orNull
+          )
       }
     } else {
-      logger.debug(s"getRequestParameter: Getting from query params name=$name")
+      logger.debug(
+        s"getRequestParameter: Getting from query params name=$name"
+      )
       request.params.get(name).orNull
     }
-  }
 
-  override def getRequestParameters: util.Map[String, Array[String]] = {
+  override def getRequestParameters
+    : util.Map[String, Array[String]] = {
     logger.debug(s"getRequestParameters")
     request.params.toSeq.map(a => (a._1, Array(a._2))).toMap.asJava
   }
@@ -67,25 +82,42 @@ class Http4sWebContext(
       case "pac4jUserProfiles" =>
         request.attributes.lookup(pac4jUserProfilesAttr).orNull
       case Pac4jConstants.SESSION_ID =>
-          request.attributes.lookup(sessionIdAttr).orNull
+        request.attributes.lookup(sessionIdAttr).orNull
       case _ =>
-        throw new NotImplementedError(s"getRequestAttribute for $name not implemented")
+        throw new NotImplementedError(
+          s"getRequestAttribute for $name not implemented"
+        )
     }
   }
 
-  override def setRequestAttribute(name: String, value: Any): Unit = {
+  override def setRequestAttribute(
+    name: String,
+    value: Any
+  ): Unit = {
     logger.debug(s"setRequestAttribute: $name")
     request = name match {
       case "pac4jUserProfiles" =>
-        request.withAttribute(pac4jUserProfilesAttr, Pac4jUserProfiles(value.asInstanceOf[util.LinkedHashMap[String, CommonProfile]]))
+        request.withAttribute(
+          pac4jUserProfilesAttr,
+          Pac4jUserProfiles(
+            value
+              .asInstanceOf[util.LinkedHashMap[String, CommonProfile]]
+          )
+        )
       case Pac4jConstants.SESSION_ID =>
-         request.withAttribute(sessionIdAttr, value.asInstanceOf[String])
+        request.withAttribute(
+          sessionIdAttr,
+          value.asInstanceOf[String]
+        )
       case _ =>
-        throw new NotImplementedError(s"setRequestAttribute for $name not implemented")
+        throw new NotImplementedError(
+          s"setRequestAttribute for $name not implemented"
+        )
     }
   }
 
-  override def getRequestHeader(name: String): String = request.headers.find(_.name == name).map(_.value).orNull
+  override def getRequestHeader(name: String): String =
+    request.headers.find(_.name == name).map(_.value).orNull
 
   override def getRequestMethod: String = request.method.name
 
@@ -103,18 +135,21 @@ class Http4sWebContext(
     }
   }
 
-  override def setResponseHeader(name: String, value: String): Unit = {
+  override def setResponseHeader(
+    name: String,
+    value: String
+  ): Unit = {
     logger.debug(s"setResponseHeader $name = $value")
-    modifyResponse { r =>
-      r.putHeaders(Header(name, value))
-    }
+    modifyResponse(r => r.putHeaders(Header(name, value)))
   }
 
   override def setResponseContentType(content: String): Unit = {
     logger.debug("setResponseContentType: " + content)
     // TODO Parse the input
     modifyResponse { r =>
-      r.withContentType(`Content-Type`(MediaType.text.html, Some(Charset.`UTF-8`)))
+      r.withContentType(
+        `Content-Type`(MediaType.text.html, Some(Charset.`UTF-8`))
+      )
     }
   }
 
@@ -122,7 +157,8 @@ class Http4sWebContext(
 
   override def getServerPort: Int = request.serverPort
 
-  override def getScheme: String = request.uri.scheme.map(_.value).orNull
+  override def getScheme: String =
+    request.uri.scheme.map(_.value).orNull
 
   override def isSecure: Boolean = request.isSecure.getOrElse(false)
 
@@ -130,7 +166,8 @@ class Http4sWebContext(
 
   override def getRequestCookies: util.Collection[Cookie] = {
     logger.debug("getRequestCookies")
-    val convertCookie = (c: RequestCookie) => new org.pac4j.core.context.Cookie(c.name, c.content)
+    val convertCookie = (c: RequestCookie) =>
+      new org.pac4j.core.context.Cookie(c.name, c.content)
     val cookies = request.cookies.map(convertCookie)
     (cookies match {
       case Nil => Nil
@@ -145,7 +182,12 @@ class Http4sWebContext(
     } else {
       Some(HttpDate.unsafeFromEpochSecond(cookie.getMaxAge))
     }
-    val http4sCookie = ResponseCookie(cookie.getName, cookie.getValue, expires, path=Option(cookie.getPath))
+    val http4sCookie = ResponseCookie(
+      cookie.getName,
+      cookie.getValue,
+      expires,
+      path = Option(cookie.getPath)
+    )
     response = response.addCookie(http4sCookie)
   }
 
@@ -156,15 +198,16 @@ class Http4sWebContext(
 
   override def getPath: String = request.uri.path.toString
 
-  override def getRequestContent: String = {
-    request.bodyText.compile.to(Chunk).map(_.mkString_("")).unsafeRunSync
-  }
+  override def getRequestContent: String =
+    request.bodyText.compile
+      .to(Chunk)
+      .map(_.mkString_(""))
+      .unsafeRunSync
 
   override def getProtocol: String = request.uri.scheme.get.value
 
-  def modifyResponse(f: Response[IO] => Response[IO]): Unit = {
+  def modifyResponse(f: Response[IO] => Response[IO]): Unit =
     response = f(response)
-  }
 
   def getRequest: Request[IO] = request
 
@@ -172,6 +215,13 @@ class Http4sWebContext(
 }
 
 object Http4sWebContext {
-  def apply(request: Request[IO], config: Config) =
-    new Http4sWebContext(request, config.getSessionStore.asInstanceOf[SessionStore[Http4sWebContext]])
+  def apply(
+    request: Request[IO],
+    config: Config
+  ) =
+    new Http4sWebContext(
+      request,
+      config.getSessionStore
+        .asInstanceOf[SessionStore[Http4sWebContext]]
+    )
 }
