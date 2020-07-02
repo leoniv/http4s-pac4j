@@ -97,7 +97,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
   val config = SessionConfig[IO](
     cookieName = "session",
     mkCookie = ResponseCookie(_, _),
-    secret = "this is a secret",
+    cryptoManager = CryptoManager.aes("this is a secret"),
     maxAge = 5.minutes
   )
 
@@ -111,10 +111,10 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
             Ok()
 
           case GET -> Root / "create" =>
-            Ok().map(_.newSession(newSession))
+            Ok().flatMap(_.newSession(newSession))
 
           case GET -> Root / "clear" =>
-            Ok().map(_.clearSession)
+            Ok().flatMap(_.clearSession)
 
           case req@GET -> Root / "read" =>
             for {
@@ -124,7 +124,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
 
           case GET -> Root / "modify" =>
             val _number = jsonObject ^|-> at[JsonObject, String, Option[Json]]("number") ^<-? Monocle.some ^<-? jsonInt
-            Ok().map(_.modifySession(_number.modify(_ + 1)))
+            Ok().flatMap(_.modifySession(_number.modify(_ + 1)))
         }
       ).orNotFound
 
@@ -135,30 +135,32 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }
 
       "not clear a session cookie when one is set" in prop { session: Session =>
-         val cookie = config.cookie(session.noSpaces)
-         val request = Request[IO](Method.GET, uri"/id").addCookie(cookie.toRequestCookie)
-         sut(request) must returnValue(not(haveClearedCookie(config.cookieName)))
+        config.cookie(session.noSpaces).map(cookie =>
+            Request[IO](Method.GET, uri"/id").addCookie(cookie.toRequestCookie)
+         ) flatMap(sut(_)) must returnValue(not(haveClearedCookie(config.cookieName)))
       }
     }
 
     "Creating a session" should {
       "set a session cookie as per mkCookie" in {
         val request = Request[IO](Method.GET, uri"/create")
-        // Explicitly uses unsafePerformSync to help with race
-        sut(request).map(freshCookies _) must returnValue(contain(config.cookie(newSession.noSpaces)))
+        sut(request).map(freshCookies _) must
+          returnValue(contain(config.cookie(newSession.noSpaces).unsafeRunSync))
       }
 
       "not include the session data in a readable form in the cookie" in {
         val request = Request[IO](Method.GET, uri"/create")
-        sut(request).map(freshCookies _) must returnValue(not(contain(beCookieWhoseContentContains("created"))))
+        sut(request).map(freshCookies _) must
+          returnValue(not(contain(beCookieWhoseContentContains("created"))))
       }
     }
 
     "Clearing a session" should {
       "clear session cookie when one is set" in prop { session: Session =>
-         val cookie = config.cookie(session.noSpaces)
-         val request = Request[IO](Method.GET, uri"/clear").addCookie(cookie.toRequestCookie)
-         sut(request) must returnValue(haveClearedCookie(config.cookieName))
+        config.cookie(session.noSpaces).map(cookie =>
+          Request[IO](Method.GET, uri"/clear").addCookie(cookie.toRequestCookie)
+        ).flatMap(sut(_)) must
+          returnValue(haveClearedCookie(config.cookieName))
       }
 
       "do nothing when one is not set" in {
@@ -175,23 +177,24 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }
 
       "read None when the session is signed with a different secret" in prop { session: Session =>
-          val cookie = config
-            .copy[IO](secret = "this is a different secret")
-            .cookie(session.noSpaces)
-          val request = Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
-          sut(request) must returnValue(haveStatus(Status.NotFound))
+         config
+           .copy[IO](cryptoManager = CryptoManager.aes("this is a different secret"))
+           .cookie(session.noSpaces)
+           .map(cookie =>
+             Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
+           ).flatMap(sut(_)) must returnValue(haveStatus(Status.NotFound))
       }
 
       "read None when the session has expired" in prop { session: Session =>
-         val cookie = config.copy[IO](maxAge = 0.seconds).cookie(session.noSpaces)
-         val request = Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
-         sut(request) must returnValue(haveStatus(Status.NotFound))
+        config.copy[IO](maxAge = 0.seconds).cookie(session.noSpaces).map(cookie =>
+          Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
+        ).flatMap(sut(_)) must returnValue(haveStatus(Status.NotFound))
       }
 
       "read the session when it exists" in prop { session: Session =>
-          val cookie = config.cookie(session.noSpaces)
-          val request = Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
-          sut(request) must returnValue(haveBody(session))
+        config.cookie(session.noSpaces).map(cookie =>
+          Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
+        ).flatMap(sut(_)) must returnValue(haveBody(session))
       }
     }
 
@@ -201,7 +204,6 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
         val response = for {
           cookie <- config
             .cookie(Json.obj("number" -> 0.asJson).noSpaces)
-            .pure[IO]
           firstRequest <- Request[IO](Method.GET, uri"/modify")
             .addCookie(cookie.toRequestCookie)
             .pure[IO]
@@ -233,9 +235,9 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }).orNotFound
 
     "allow access to the service when a session is set" in prop { session: Session =>
-      val cookie = config.cookie(session.noSpaces)
-      val request = Request[IO](Method.GET, uri"/").addCookie(cookie.toRequestCookie)
-      sut(request) must returnValue(haveStatus(Status.Ok))
+      config.cookie(session.noSpaces).map(cookie =>
+        Request[IO](Method.GET, uri"/").addCookie(cookie.toRequestCookie)
+      ).flatMap(sut(_)) must returnValue(haveStatus(Status.Ok))
     }
 
     "use the fallback response when a session is not set" in {

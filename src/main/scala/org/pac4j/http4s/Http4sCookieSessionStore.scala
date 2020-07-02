@@ -21,7 +21,8 @@ import org.slf4j.LoggerFactory
 trait Http4sCookieSessionStore extends SessionStore[Http4sWebContext] {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  def getSession(context: Http4sWebContext): Option[Session] = context.getRequest.session2
+  def getSession(context: Http4sWebContext): Option[Session] =
+    context.getRequest.session.unsafeRunSync
 
   override def getOrCreateSessionId(context: Http4sWebContext): String = {
     "pac4j"
@@ -52,7 +53,7 @@ trait Http4sCookieSessionStore extends SessionStore[Http4sWebContext] {
     logger.debug(s"set key: $key")
 
     context.modifyResponse { r =>
-      r.newOrModifySession { f => set(f, key, value) }
+      r.newOrModifySession { f => set(f, key, value) }.unsafeRunSync
     }
   }
 
@@ -74,7 +75,7 @@ trait Http4sCookieSessionStore extends SessionStore[Http4sWebContext] {
 
   override def destroySession(context: Http4sWebContext): Boolean = {
     logger.debug("destroySession")
-    context.modifyResponse(r => r.clearSession)
+    context.modifyResponse(r => r.clearSession.unsafeRunSync)
     true
   }
 

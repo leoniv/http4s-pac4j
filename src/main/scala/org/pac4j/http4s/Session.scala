@@ -31,49 +31,88 @@ import scala.util.Try
 
 object SessionSyntax {
   import implicits._
-  implicit final class RequestOps[F[_]](val v: Request[F]) extends AnyVal {
-    def session(implicit S: Sync[F]): F[Option[Session]] =
-      ??? //FIXME S.pure(v.attributes.lookup(Session.requestAttr))
-
-    def session2: Option[Session] =
-      ??? //FIXME v.attributes.lookup(Session.requestAttr)
+  implicit final class RequestOps(val v: Request[IO]) extends AnyVal {
+    def session: IO[Option[Session]] =
+      Session.requestAttr.map(v.attributes.lookup(_))
   }
 
-// FIXME:
-//  implicit final class TaskResponseOps[F[_]](val v: F[Response]) extends AnyVal {
-//    def clearSession: F[Response] =
-//      v.withAttribute(Session.responseAttr(_ => None))
-//
-//    def modifySession(f: Session => Session): Task[Response] = {
-//      val lf: Option[Session] => Option[Session] = _.cata(f.andThen(_.some), None)
-//      v.map { response =>
-//        response.withAttribute(Session.responseAttr(response.attributes.get(Session.responseAttr).cata(_.andThen(lf), lf)))
-//      }
-//    }
-//
-//    def newSession(session: Session): Task[Response] =
-//      v.withAttribute(Session.responseAttr(_ => Some(session)))
-//  }
+  implicit final class ResponseOps(val v: Response[IO]) extends AnyVal {
+    def clearSession: IO[Response[IO]] =
+      Session.responseAttr.map(v.withAttribute(_, (_: Option[Session]) => None))
 
-  implicit final class ResponseOps[F[_]](val v: Response[F]) extends AnyVal {
-    def clearSession: Response[F] =
-      ??? //FIXME: v.withAttribute(Session.responseAttr, _ => None)
-
-    def modifySession(f: Session => Session): Response[F] = {
+    def modifySession(f: Session => Session): IO[Response[IO]] = {
       val lf: Option[Session] => Option[Session] = _.cata(f.andThen(_.some), None)
-      ??? //FIXME: v.withAttribute(Session.responseAttr(v.attributes.lookup(Session.responseAttr).cata(_.andThen(lf), lf)))
+      Session.responseAttr.map { key =>
+        v.withAttribute(key ,v.attributes.lookup(key).cata(_.andThen(lf), lf))
+      }
     }
 
-    def newOrModifySession(f: Option[Session] => Session): Response[F] = {
-//      val newUpdateFn: Option[Session] => Option[Session] = v.attributes.lookup(Session.responseAttr) match {
-//        case Some(currentUpdateFn) => currentUpdateFn.andThen(f.andThen(_.some))
-//        case None => f.andThen(_.some)
-//      }
-      ??? //FIXME: v.withAttribute(Session.responseAttr(newUpdateFn))
+    def newOrModifySession(f: Option[Session] => Session): IO[Response[IO]] = {
+      val lf: Option[Session] => Option[Session] = f.andThen(_.some)
+      Session.responseAttr.map { key =>
+        v.withAttribute(key ,v.attributes.lookup(key).cata(_.andThen(lf), lf))
+      }
     }
 
-    def newSession(session: Session): Response[F] =
-     ??? //FIXME:  v.withAttribute(Session.responseAttr(_ => Some(session)))
+    def newSession(session: Session): IO[Response[IO]] =
+      Session.responseAttr.map { key =>
+        v.withAttribute(key, (_: Option[Session]) => Some(session))
+      }
+  }
+}
+
+trait CryptoManager[F[_]] {
+  def encrypt(conetent: String): F[String]
+  def decrypt(conetent: String): F[Option[String]]
+  def sign(conent: String): F[String]
+  def checkSign(signature: String, content: String): F[Option[Unit]]
+}
+
+object CryptoManager {
+  def aes[F[_]: Sync](secret: String): CryptoManager[F] = new CryptoManager[F] {
+    require(secret.length >= 16)
+
+    private def constantTimeEquals(a: String, b: String): Boolean =
+      if (a.length != b.length) {
+        false
+      } else {
+        var equal = 0
+        for (i <- Array.range(0, a.length)) {
+          equal |= a(i) ^ b(i)
+        }
+        equal == 0
+      }
+
+    private[this] def keySpec: SecretKeySpec =
+      new SecretKeySpec(secret.substring(0, 16).getBytes("UTF-8"), "AES")
+
+    def encrypt(content: String): F[String] = Sync[F].delay {
+      val cipher = Cipher.getInstance("AES")
+      cipher.init(Cipher.ENCRYPT_MODE, keySpec)
+      Hex.encodeHex(cipher.doFinal(content.getBytes("UTF-8"))).mkString
+    }
+
+    def decrypt(content: String): F[Option[String]] = Sync[F].delay {
+      val cipher = Cipher.getInstance("AES")
+      cipher.init(Cipher.DECRYPT_MODE, keySpec)
+      Try(new String(cipher.doFinal(Hex.decodeHex(content)), "UTF-8"))
+        .toOption
+    }
+
+    def sign(content: String): F[String] = Sync[F].delay {
+      val signKey = secret.getBytes("UTF-8")
+      val signMac = Mac.getInstance("HmacSHA1")
+      signMac.init(new SecretKeySpec(signKey, "HmacSHA256"))
+      Base64
+        .getEncoder
+        .encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
+    }
+
+    def checkSign(signature: String, content: String): F[Option[Unit]] =
+      sign(content).map { actualSign =>
+        if (constantTimeEquals(signature, actualSign)) ().some
+        else None
+    }
   }
 }
 
@@ -88,104 +127,70 @@ object SessionSyntax {
 final case class SessionConfig[F[_]: Sync](
   cookieName: String,
   mkCookie: (String, String) => ResponseCookie,
-  secret: String,
+  cryptoManager: CryptoManager[F],
   maxAge: Duration
 ) {
-  require(secret.length >= 16)
 
-  def constantTimeEquals(a: String, b: String): Boolean =
-    if (a.length != b.length) {
-      false
-    } else {
-      var equal = 0
-      for (i <- Array.range(0, a.length)) {
-        equal |= a(i) ^ b(i)
-      }
-      equal == 0
-    }
-
-  private[this] def keySpec: SecretKeySpec =
-    new SecretKeySpec(secret.substring(0, 16).getBytes("UTF-8"), "AES")
-
-  private[this] def encrypt(content: String): String = {
-    val cipher = Cipher.getInstance("AES")
-    cipher.init(Cipher.ENCRYPT_MODE, keySpec)
-    Hex.encodeHex(cipher.doFinal(content.getBytes("UTF-8"))).mkString
-  }
-
-  private[this] def decrypt(content: String): Option[String] = {
-    val cipher = Cipher.getInstance("AES")
-    cipher.init(Cipher.DECRYPT_MODE, keySpec)
-    Try(new String(cipher.doFinal(Hex.decodeHex(content)), "UTF-8")).toOption
-  }
-
-  private[this] def sign(content: String): String = {
-    val signKey = secret.getBytes("UTF-8")
-    val signMac = Mac.getInstance("HmacSHA1")
-    signMac.init(new SecretKeySpec(signKey, "HmacSHA256"))
-    Base64.getEncoder.encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
-  }
-//
-//  // FIXME: rename to `responseCookie`
-//  def cookie(content: String): F[ResponseCookie] =
-//    Sync[F].delay(cookie2(content))
-
-  // FIXME: rename to `responseCookie`
-  def cookie(content: String): ResponseCookie = {
+  def cookie(content: String): F[ResponseCookie] = {
       val now = new Date().getTime / 1000
       val expires = now + maxAge.toSeconds
       val serialized = s"$expires-$content"
-      val signed = sign(serialized)
-      val encrypted = encrypt(serialized)
-      mkCookie(cookieName, s"$signed-$encrypted")
+      for {
+        signed <- cryptoManager.sign(serialized)
+        encrypted <- cryptoManager.encrypt(serialized)
+      } yield mkCookie(cookieName, s"$signed-$encrypted")
     }
 
-  // FIXME: rename param to `requestCookie`
-  def check(cookie: RequestCookie): F[Option[String]] =
-    Sync[F].delay {
+   private[this] def split2(str: String): Option[(String, String)] =
+     str.split('-') match {
+       case Array(signature, value) => (signature, value).some
+       case _ => None
+   }
+
+  private[this] def decrypt(cookie: RequestCookie): OptionT[F, String] =
+    for {
+      (signature, value) <- OptionT(Sync[F].pure(split2(cookie.content)))
+      decrypted <- OptionT(cryptoManager.decrypt(value))
+      _ <- OptionT(cryptoManager.checkSign(signature, decrypted))
+    } yield decrypted
+
+  def check(cookie: RequestCookie): OptionT[F, String] = {
       val now = new Date().getTime / 1000
-      cookie.content.split('-') match {
-        case Array(signature, value) =>
-          for {
-            decrypted <- decrypt(value) if constantTimeEquals(signature, sign(decrypted))
-            Array(expires, content) = decrypted.split("-", 2)
-            expiresSeconds <- Try(expires.toLong).toOption if expiresSeconds > now
-          } yield content
-        case _ =>
-          None
-      }
-    }
+
+      for {
+        decrypted <- decrypt(cookie)
+        (expires, content) <- OptionT(Sync[F].pure( split2(decrypted)))
+        expiresSeconds <- OptionT(Sync[F].delay(Try(expires.toLong).toOption))
+          if expiresSeconds > now
+      } yield content
+  }
 }
 
 object Session {
-  type Cookie = ResponseCookie
   import implicits._
   private val logger = LoggerFactory.getLogger(this.getClass)
 
   val requestAttr: IO[Key[Session]] = Key.newKey[IO, Session]
   val responseAttr: IO[Key[Option[Session] => Option[Session]]] =
     Key.newKey[IO, Option[Session] => Option[Session]]
-// FIXME
-//  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[Cookie] =
-//    config.cookie(session.noSpaces)
 
-  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): Cookie =
+  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[ResponseCookie] =
     config.cookie(session.noSpaces)
 
-  private[this] def checkSignature(config: SessionConfig[IO], cookie: RequestCookie): IO[Option[Session]] =
-    config.check(cookie).map(_.flatMap(jawn.parse(_).toOption))
+  private[this] def checkSignature(config: SessionConfig[IO], cookie: RequestCookie): OptionT[IO, Session] =
+    config.check(cookie).mapFilter(jawn.parse(_).toOption)
 
-  private[this] def sessionFromRequest(config: SessionConfig[IO], request: Request[IO]): IO[Option[Session]] =
+  private[this] def sessionFromRequest(config: SessionConfig[IO], request: Request[IO]): OptionT[IO, Session] =
     (for {
       allCookies <- OptionT.liftF(IO.pure(request.cookies))
       sessionCookie <- OptionT(IO.pure(allCookies.find(_.name === config.cookieName)))
-      session <- OptionT(checkSignature(config, sessionCookie))
-    } yield session).value
+      session <- checkSignature(config, sessionCookie)
+    } yield session)
 
   private[this] def applySessionUpdates(
     config: SessionConfig[IO],
     sessionFromRequest: Option[Session],
-    serviceResponse: OptionT[IO, Response[IO]]): OptionT[IO, Response[IO]] = {
+    serviceResponse: Response[IO]): Response[IO] = {
     ??? //  FIXME:
 //    Task.delay {
 //      serviceResponse match {
@@ -193,7 +198,7 @@ object Session {
 //          val updateSession = response.attributes.get(responseAttr) | identity
 //          updateSession(sessionFromRequest).cata(
 //            session => {
-//              response.addCookie(sessionAsCookie2(config, session))
+//              response.addCookie(sessionAsCookie(config, session))
 //            },
 //            if (sessionFromRequest.isDefined) response.removeCookie(config.cookieName) else response
 //          )
@@ -220,11 +225,10 @@ object Session {
 //    }
 
   def sessionRequired(fallback: IO[Response[IO]]): HttpMiddleware[IO] =
-    ??? //  FIXME:
-//    Middleware { (request, service) =>
-//      import SessionSyntax._
-//      OptionT(request.session).flatMapF(_ => service(request).map(_.toOption)).getOrElseF(fallback)
-//    }
+    Middleware { (request, service) =>
+      import SessionSyntax._
+      OptionT(request.session).flatMap(_ => service(request)).orElse(OptionT.liftF(fallback))
+    }
 
   def printRequestSessionKeys(sessionOpt: Option[Session]): IO[Unit] =
     IO.delay {
