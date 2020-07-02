@@ -24,6 +24,7 @@ lazy val lib = project
       Deps.slf4jApi,
       Deps.commonCodec,
       Deps.cats,
+      Deps.catsEffect,
       Deps.vault,
       Deps.circeOptics % Test,
       Deps.http4sJawn % Test,
@@ -33,3 +34,16 @@ lazy val lib = project
       Deps.specs2Cats % Test
     )
   )
+
+lazy val example = project
+  .in(file("example"))
+  .settings(
+    libraryDependencies ++= Seq(
+      Deps.http4sDsl,
+      Deps.http4sServer,
+      Deps.pack4j,
+      Deps.cats,
+      Deps.catsEffect
+    )
+  )
+  .dependsOn(lib)
