@@ -10,7 +10,7 @@ import org.pac4j.core.http.adapter.HttpActionAdapter
   *
   * @author Iain Cardnell
   */
-final case class DefaultHttpActionAdapter() extends HttpActionAdapter[IO[Response[IO]], Http4sWebContext] {
+object DefaultHttpActionAdapter extends HttpActionAdapter[IO[Response[IO]], Http4sWebContext] {
   override def adapt(code: Int, context: Http4sWebContext): IO[Response[IO]] = {
     IO.delay {
       code match {
