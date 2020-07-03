@@ -21,7 +21,7 @@ import org.pac4j.http4s.{
   Http4sCookieSessionStore
 }
 
-class ConfigFactory extends IConfigFactroy {
+object ConfigFactory extends IConfigFactroy {
   override def build(parameters: AnyRef*): Config = {
     val clients = new Clients(
       "http://localhost:8080/callback",
@@ -35,7 +35,7 @@ class ConfigFactory extends IConfigFactroy {
     //config.addAuthorizer("admin", new RequireAnyRoleAuthorizer[_ <: CommonProfile]("ROLE_ADMIN"))
     //config.addAuthorizer("custom", new CustomAuthorizer)
     config.setHttpActionAdapter(
-      DefaultHttpActionAdapter()
+      DefaultHttpActionAdapter
     ) // <-- Render a nicer page
     config.setSessionStore(new Http4sCacheSessionStore())
     //config.setSessionStore(Http4sCookieSessionStore)

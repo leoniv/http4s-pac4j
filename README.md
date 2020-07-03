@@ -39,8 +39,25 @@ It's based on Scala 2.12, Http4s 0.16 and on the **[pac4j security engine](https
 
 ## Demo
 
-The demo webapp: [http4s-pac4j-demo](https://github.com/pac4j/http4s-pac4j-demo) is available for tests and implements many authentication mechanisms: Facebook, Twitter, form, basic auth, CAS, SAML, OpenID Connect, JWT...
+> The demo webapp for http4s-pac4j:1.0.1: [http4s-pac4j-demo](https://github.com/pac4j/http4s-pac4j-demo)
 
+The current demo webapp: [example](./example) is available for tests and implements many
+authentication mechanisms: Facebook, Twitter, form, basic auth, CAS, SAML,
+OpenID Connect, JWT...
+
+Run example server in sbt console:
+
+```
+sbt> pack4jExample/reStart
+```
+
+Navigates to `localhost:8080`
+
+Stop example server in sbt console:
+
+```
+sbt> pack4jExample/reStop
+```
 
 ## Versions
 

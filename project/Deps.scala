@@ -19,9 +19,11 @@ object Deps {
   val http4sServer = "org.http4s" %% "http4s-server" % Versions.http4s
   val http4sCirce = "org.http4s" %% "http4s-circe" % Versions.http4s
   val http4sJawn = "org.http4s" %% "http4s-jawn" % Versions.http4s
-  val http4sBlazeServer = "org.http4s" %% "http4s-blaze-server" % Versions.http4s
+  val http4sBlazeServer =
+    "org.http4s" %% "http4s-blaze-server" % Versions.http4s
   val slf4jApi = "org.slf4j" % "slf4j-api" % "1.7.26"
-  val logback = "ch.qos.logback" % "logback-classic" % Versions.logback
+  val logback =
+    "ch.qos.logback" % "logback-classic" % Versions.logback
   val commonCodec = "commons-codec" % "commons-codec" % "1.14"
   val cats = "org.typelevel" %% "cats-core" % Versions.cats
   val catsEffect = "org.typelevel" %% "cats-effect" % Versions.cats
