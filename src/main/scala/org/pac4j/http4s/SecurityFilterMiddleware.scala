@@ -38,7 +38,7 @@ class DefaultSecurityGrantedAccessAdapter(service: HttpRoutes[IO])
   *
   * @author Iain Cardnell
   */
-final case class SecurityFilterMiddleware() {
+object SecurityFilterMiddleware {
 
   def securityFilter(
     config: Config,

@@ -10,7 +10,7 @@ import org.pac4j.core.http.adapter.HttpActionAdapter
   *
   * @author Iain Cardnell
   */
-final case class DefaultHttpActionAdapter()
+object DefaultHttpActionAdapter
     extends HttpActionAdapter[IO[Response[IO]], Http4sWebContext] {
   override def adapt(
     code: Int,
