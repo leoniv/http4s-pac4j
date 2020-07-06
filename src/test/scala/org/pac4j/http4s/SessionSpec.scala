@@ -25,9 +25,10 @@ import org.specs2.ScalaCheck
 import org.specs2.matcher.{Matcher, IOMatchers}
 import org.specs2.mutable.Specification
 import org.specs2.concurrent.ExecutionEnv
+import mouse.option._
+import cats.data.OptionT
 
 import scala.concurrent.duration._
-import cats.data.OptionT
 
 // Copyright 2013-2014 http4s [http://www.http4s.org]
 
@@ -81,7 +82,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
   val config = SessionConfig[IO](
     cookieName = "session",
     mkCookie = ResponseCookie(_, _),
-    cryptoManager = CryptoManager.aes("this is a secret"),
+    secret = "this is a secret",
     maxAge = 5.minutes
   )
 
@@ -157,7 +158,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
 
       "read None when the session is signed with a different secret" in prop { session: Session =>
          config
-           .copy[IO](cryptoManager = CryptoManager.aes("this is a different secret"))
+           .copy[IO](secret = "this is a different secret")
            .cookie(session.noSpaces)
            .map(cookie =>
              Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)

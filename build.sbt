@@ -9,6 +9,7 @@ val specs2Version = "4.10.0"
 val catsVersion = "2.1.1"
 val catsEffectVersion = "2.1.3"
 val vaultVersion = "2.0.0"
+val mouseVersion = "0.25"
 
 libraryDependencies ++= Seq(
   "io.circe" %% "circe-core" % circeVersion,
@@ -21,6 +22,7 @@ libraryDependencies ++= Seq(
   "commons-codec" % "commons-codec" % "1.14",
   "org.typelevel" %% "cats-core" % catsVersion,
   "io.chrisdavenport" %% "vault" % vaultVersion,
+  "org.typelevel" %% "mouse" % mouseVersion,
 
   "io.circe" %% "circe-optics" % circeVersion % Test,
   "org.http4s" %% "http4s-jawn" % http4sVersion % Test,
