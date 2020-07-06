@@ -13,7 +13,7 @@ import org.http4s.headers.{Cookie => CookieHeader}
 import org.pac4j.core.config.Config
 import org.pac4j.core.profile.CommonProfile
 import org.slf4j.LoggerFactory
-import fs2.Chunk
+import fs2.Collector
 
 import scala.collection.JavaConverters._
 
@@ -154,7 +154,7 @@ class Http4sWebContext(
   override def getPath: String = request.uri.path.toString
 
   override def getRequestContent: String = {
-    request.bodyText.compile.to(Chunk).map(_.mkString_("")).unsafeRunSync
+    request.bodyText.compile.to(Collector.string).unsafeRunSync
   }
 
   override def getProtocol: String = request.uri.scheme.get.value
