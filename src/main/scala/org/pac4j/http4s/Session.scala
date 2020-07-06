@@ -200,7 +200,8 @@ object Session {
     config: SessionConfig[IO],
     sessionFromRequest: Option[Session],
     response: Response[IO]): IO[Response[IO]] = {
-      val updateSession = response.attributes.lookup(responseAttr) | identity
+      val updateSession = response.attributes.lookup(responseAttr)
+        .getOrElse[Option[Session] => Option[Session]](identity _)
       updateSession(sessionFromRequest).map(sessionAsCookie(config, _))
         .sequence
         .map(_.cata(

@@ -3,7 +3,6 @@ package org.pac4j.http4s
 import cats.implicits._
 import cats.effect.IO
 import Generators._
-import JsonHelpers.{json, jsonEncoder}
 import Matchers._
 import SessionSyntax._
 import io.circe._
@@ -18,6 +17,7 @@ import org.http4s._
 import org.http4s.dsl.io._
 import org.http4s.headers.{`Content-Type`, `Set-Cookie`, Cookie => CookieHeader}
 import org.http4s.implicits._
+import org.http4s.circe._
 import cats.data.NonEmptyList
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Arbitrary.arbitrary
@@ -30,26 +30,6 @@ import scala.concurrent.duration._
 import cats.data.OptionT
 
 // Copyright 2013-2014 http4s [http://www.http4s.org]
-
-
-object JsonHelpers {
-  implicit val json: EntityDecoder[IO, Json] = org.http4s.jawn.jawnDecoder[IO, Json]
-  def jsonOf[A](implicit decoder: Decoder[A]): EntityDecoder[IO, A] =
-    json.flatMapR { json =>
-      decoder.decodeJson(json).fold(
-        failure =>
-          DecodeResult.failure(InvalidMessageBodyFailure(s"Could not decode JSON: $json", Some(failure))),
-        DecodeResult.success(_)
-      )
-    }
-
-  implicit val jsonEncoder: EntityEncoder[IO, Json] =
-    EntityEncoder[IO, String].contramap[Json] { json =>
-      Printer.noSpaces.pretty(json)
-    }.withContentType(`Content-Type`(MediaType.application.json))
-  def jsonEncoderOf[A](implicit encoder: Encoder[A]): EntityEncoder[IO, A] =
-    jsonEncoder.contramap[A](encoder.apply)
-}
 
 object Generators {
   implicit def arbSession: Arbitrary[Session] =
@@ -91,6 +71,9 @@ object Matchers {
 }
 
 class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck with IOMatchers {
+  implicit class ResponseCookieOps(c: ResponseCookie) {
+    def toRequestCookie: RequestCookie = RequestCookie(c.name, c.content)
+  }
   import implicits._
   implicit val cs = IO.contextShift(exEnv.executionContext)
   implicit val ti = IO.timer(exEnv.executionContext)
@@ -117,11 +100,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
           case GET -> Root / "clear" =>
             Ok().map(_.clearSession)
 
-          case req@GET -> Root / "read" =>
-            for {
-              session <- req.session.pure[IO]
-              response <- session.cata(Ok(_), NotFound())
-            } yield response
+          case req@GET -> Root / "read" => req.session.cata(Ok(_), NotFound())
 
           case GET -> Root / "modify" =>
             val _number = jsonObject ^|-> at[JsonObject, String, Option[Json]]("number") ^<-? Monocle.some ^<-? jsonInt

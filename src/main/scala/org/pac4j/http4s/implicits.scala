@@ -8,11 +8,5 @@ object implicits {
       case Some(a) => some(a)
       case None    => none
     }
-
-    def | (a: A): A = oa.getOrElse(a)
-  }
-
-  implicit class ResponseCookieOps(c: ResponseCookie) {
-    def toRequestCookie: RequestCookie = RequestCookie(c.name, c.content)
   }
 }

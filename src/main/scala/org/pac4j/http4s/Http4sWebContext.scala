@@ -79,7 +79,7 @@ class Http4sWebContext(
       case "pac4jUserProfiles" =>
         request.withAttribute(pac4jUserProfilesAttr, Pac4jUserProfiles(value.asInstanceOf[util.LinkedHashMap[String, CommonProfile]]))
       case Pac4jConstants.SESSION_ID =>
-         request.withAttribute(sessionIdAttr, value.asInstanceOf[String])
+        request.withAttribute(sessionIdAttr, value.asInstanceOf[String])
       case _ =>
         throw new NotImplementedError(s"setRequestAttribute for $name not implemented")
     }
@@ -132,10 +132,7 @@ class Http4sWebContext(
     logger.debug("getRequestCookies")
     val convertCookie = (c: RequestCookie) => new org.pac4j.core.context.Cookie(c.name, c.content)
     val cookies = request.cookies.map(convertCookie)
-    (cookies match {
-      case Nil => Nil
-      case _ => cookies
-    }).asJavaCollection
+    cookies.asJavaCollection
   }
 
   override def addResponseCookie(cookie: Cookie): Unit = {

@@ -114,6 +114,4 @@ trait Http4sCookieSessionStore extends SessionStore[Http4sWebContext] {
   }
 }
 
-object Http4sCookieSessionStore {
-  def apply: Http4sCookieSessionStore = new Http4sCookieSessionStore {}
-}
+object Http4sCookieSessionStore extends Http4sCookieSessionStore

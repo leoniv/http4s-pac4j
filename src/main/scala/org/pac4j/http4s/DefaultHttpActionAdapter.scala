@@ -20,6 +20,7 @@ object DefaultHttpActionAdapter extends HttpActionAdapter[IO[Response[IO]], Http
         case HttpConstants.NO_CONTENT => context.setResponseStatus(Status.NoContent.code)
         case HttpConstants.TEMP_REDIRECT => context.setResponseStatus(Status.Found.code)
       }
-    }.as(context.getResponse)
+      context.getResponse
+    }
   }
 }
