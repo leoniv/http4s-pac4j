@@ -106,13 +106,14 @@ final case class SessionConfig[F[_]: Sync](
   }
 
   def cookie(content: String): F[ResponseCookie] =
-    for {
-      now <- Sync[F].delay(new Date().getTime / 1000)
-      expires = now + maxAge.toSeconds
-      serialized = s"$expires-$content"
-      signed <- Sync[F].delay(sign(serialized))
-      encrypted <- Sync[F].delay(encrypt(serialized))
-    } yield mkCookie(cookieName, s"$signed-$encrypted")
+    Sync[F].delay {
+      val now = new Date().getTime / 1000
+      val expires = now + maxAge.toSeconds
+      val serialized = s"$expires-$content"
+      val signed = sign(serialized)
+      val encrypted = encrypt(serialized)
+      mkCookie(cookieName, s"$signed-$encrypted")
+    }
 
   def check(cookie: RequestCookie): IO[Option[String]] =
     IO.delay {
