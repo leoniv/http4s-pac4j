@@ -3,7 +3,7 @@ package org.pac4j.http4s
 import java.util
 
 import cats.implicits._
-import cats.effect.IO
+import cats.effect.{IO, SyncIO}
 import org.http4s._
 import io.chrisdavenport.vault.Key
 import org.pac4j.core.context.session.SessionStore
@@ -37,9 +37,9 @@ class Http4sWebContext(
   case class Pac4jUserProfiles(pac4jUserProfiles: util.LinkedHashMap[String, CommonProfile])
 
   val pac4jUserProfilesAttr: Key[Pac4jUserProfiles] =
-    Key.newKey[IO, Pac4jUserProfiles].unsafeRunSync
+    Key.newKey[SyncIO, Pac4jUserProfiles].unsafeRunSync
   val sessionIdAttr: Key[String] =
-    Key.newKey[IO, String].unsafeRunSync
+    Key.newKey[SyncIO, String].unsafeRunSync
 
   override def getSessionStore: SessionStore[Http4sWebContext] = sessionStore
 
