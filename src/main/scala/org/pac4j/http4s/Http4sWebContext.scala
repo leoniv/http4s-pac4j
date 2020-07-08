@@ -93,7 +93,14 @@ class Http4sWebContext(
 
   override def writeResponseContent(content: String): Unit = {
     logger.debug("writeResponseContent")
-    modifyResponse(r => r.withBody(content).unsafeRunSync)
+    val contentType = response.contentType
+    modifyResponse{ rsp => contentType.fold(
+        rsp.withEntity(content)
+      )(
+        // withBody overwrites the contentType to text/plain. Set it back to what it was before.
+        rsp.withEntity(content).withContentType(_)
+      )
+    }
   }
 
   override def setResponseStatus(code: Int): Unit = {

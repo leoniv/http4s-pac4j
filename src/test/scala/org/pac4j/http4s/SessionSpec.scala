@@ -79,7 +79,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
   implicit val cs = IO.contextShift(exEnv.executionContext)
   implicit val ti = IO.timer(exEnv.executionContext)
 
-  val config = SessionConfig[IO](
+  val config = SessionConfig(
     cookieName = "session",
     mkCookie = ResponseCookie(_, _),
     secret = "this is a secret",
@@ -116,7 +116,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }
 
       "not clear a session cookie when one is set" in prop { session: Session =>
-        config.cookie(session.noSpaces).map(cookie =>
+        config.cookie[IO](session.noSpaces).map(cookie =>
             Request[IO](Method.GET, uri"/id").addCookie(cookie.toRequestCookie)
          ) flatMap(sut(_)) must returnValue(not(haveClearedCookie(config.cookieName)))
       }
@@ -138,7 +138,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
 
     "Clearing a session" should {
       "clear session cookie when one is set" in prop { session: Session =>
-        config.cookie(session.noSpaces).map(cookie =>
+        config.cookie[IO](session.noSpaces).map(cookie =>
           Request[IO](Method.GET, uri"/clear").addCookie(cookie.toRequestCookie)
         ).flatMap(sut(_)) must returnValue(haveClearedCookie(config.cookieName))
       }
@@ -158,21 +158,21 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
 
       "read None when the session is signed with a different secret" in prop { session: Session =>
          config
-           .copy[IO](secret = "this is a different secret")
-           .cookie(session.noSpaces)
+           .copy(secret = "this is a different secret")
+           .cookie[IO](session.noSpaces)
            .map(cookie =>
              Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
            ).flatMap(sut(_)) must returnValue(haveStatus(Status.NotFound))
       }
 
       "read None when the session has expired" in prop { session: Session =>
-        config.copy[IO](maxAge = 0.seconds).cookie(session.noSpaces).map(cookie =>
+        config.copy(maxAge = 0.seconds).cookie[IO](session.noSpaces).map(cookie =>
           Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
         ).flatMap(sut(_)) must returnValue(haveStatus(Status.NotFound))
       }
 
       "read the session when it exists" in prop { session: Session =>
-        config.cookie(session.noSpaces).map(cookie =>
+        config.cookie[IO](session.noSpaces).map(cookie =>
           Request[IO](Method.GET, uri"/read").addCookie(cookie.toRequestCookie)
         ).flatMap(sut(_)) must returnValue(haveStatus(Status.Ok) and haveBody(session))
       }
@@ -183,7 +183,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
         def unsafeToNel[A](as: List[A]): NonEmptyList[A] = NonEmptyList(as.head, as.tail)
         val response = for {
           cookie <- config
-            .cookie(Json.obj("number" -> 0.asJson).noSpaces)
+            .cookie[IO](Json.obj("number" -> 0.asJson).noSpaces)
           firstRequest <- Request[IO](Method.GET, uri"/modify")
             .addCookie(cookie.toRequestCookie)
             .pure[IO]
@@ -215,7 +215,7 @@ class SessionSpec(val exEnv: ExecutionEnv) extends Specification with ScalaCheck
       }).orNotFound
 
     "allow access to the service when a session is set" in prop { session: Session =>
-      config.cookie(session.noSpaces).map(cookie =>
+      config.cookie[IO](session.noSpaces).map(cookie =>
         Request[IO](Method.GET, uri"/").addCookie(cookie.toRequestCookie)
       ).flatMap(sut(_)) must returnValue(haveStatus(Status.Ok))
     }

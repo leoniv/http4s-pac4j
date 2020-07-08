@@ -62,7 +62,7 @@ object SessionSyntax {
   * @param secret
   * @param maxAge
   */
-final case class SessionConfig[F[_]: Sync](
+final case class SessionConfig(
   cookieName: String,
   mkCookie: (String, String) => ResponseCookie,
   secret: String,
@@ -87,7 +87,7 @@ final case class SessionConfig[F[_]: Sync](
   private[this] def encrypt(content: String): String = {
     val cipher = Cipher.getInstance("AES")
     cipher.init(Cipher.ENCRYPT_MODE, keySpec)
-    Hex.encodeHex(cipher.doFinal(content.getBytes("UTF-8"))).mkString
+    Hex.encodeHexString(cipher.doFinal(content.getBytes("UTF-8")))
   }
 
   private[this] def decrypt(content: String): Option[String] = {
@@ -105,7 +105,7 @@ final case class SessionConfig[F[_]: Sync](
       .encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
   }
 
-  def cookie(content: String): F[ResponseCookie] =
+  def cookie[F[_]: Sync](content: String): F[ResponseCookie] =
     Sync[F].delay {
       val now = new Date().getTime / 1000
       val expires = now + maxAge.toSeconds
@@ -138,17 +138,17 @@ object Session {
   val responseAttr: Key[Option[Session] => Option[Session]] =
     Key.newKey[SyncIO, Option[Session] => Option[Session]].unsafeRunSync
 
-  private[this] def sessionAsCookie(config: SessionConfig[IO], session: Session): IO[ResponseCookie] =
-    config.cookie(session.noSpaces)
+  private[this] def sessionAsCookie(config: SessionConfig, session: Session): IO[ResponseCookie] =
+    config.cookie[IO](session.noSpaces)
 
   private[this] def checkSignature(
-    config: SessionConfig[IO],
+    config: SessionConfig,
     cookie: RequestCookie
   ): IO[Option[Session]] =
     OptionT(config.check(cookie)).mapFilter(jawn.parse(_).toOption).value
 
   private[this] def sessionFromRequest(
-      config: SessionConfig[IO],
+      config: SessionConfig,
       request: Request[IO]
     ): IO[Option[Session]] =
     (for {
@@ -160,7 +160,7 @@ object Session {
     IO.delay(logger.debug(msg))
 
   def applySessionUpdates(
-    config: SessionConfig[IO],
+    config: SessionConfig,
     sessionFromRequest: Option[Session],
     response: Response[IO]): IO[Response[IO]] = {
       val updateSession = response.attributes.lookup(responseAttr)
@@ -174,7 +174,7 @@ object Session {
         )
   }
 
-  def sessionManagement(config: SessionConfig[IO]): HttpMiddleware[IO] =
+  def sessionManagement(config: SessionConfig): HttpMiddleware[IO] =
     Middleware { (request, service) =>
       for {
         _ <- OptionT.liftF(debug(s"starting for ${request.method} ${request.uri}"))
