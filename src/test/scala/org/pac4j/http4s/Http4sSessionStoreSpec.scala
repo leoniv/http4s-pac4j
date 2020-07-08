@@ -5,7 +5,10 @@ import org.specs2.mutable.Specification
 import Http4sCookieSessionStore._
 import io.circe.syntax._
 
-object Http4sCookieSessionStoreSpec extends Specification with Http4sCookieSessionStore {
+object Http4sCookieSessionStoreSpec extends Specification {
+  val store = new Http4sCookieSessionStore {}
+  import store._
+
   "get" should {
     "return null if no session" >> {
       get(None, "test") must beNone

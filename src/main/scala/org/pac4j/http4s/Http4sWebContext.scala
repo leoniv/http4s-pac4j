@@ -67,7 +67,7 @@ class Http4sWebContext(
       case "pac4jUserProfiles" =>
         request.attributes.lookup(pac4jUserProfilesAttr).orNull
       case Pac4jConstants.SESSION_ID =>
-          request.attributes.lookup(sessionIdAttr).orNull
+        request.attributes.lookup(sessionIdAttr).orNull
       case _ =>
         throw new NotImplementedError(s"getRequestAttribute for $name not implemented")
     }
