@@ -105,15 +105,14 @@ final case class SessionConfig[F[_]: Sync](
       .encodeToString(signMac.doFinal(content.getBytes("UTF-8")))
   }
 
-  def cookie(content: String): F[ResponseCookie] = {
-      val now = new Date().getTime / 1000
-      val expires = now + maxAge.toSeconds
-      val serialized = s"$expires-$content"
-      for {
-        signed <- Sync[F].delay(sign(serialized))
-        encrypted <- Sync[F].delay(encrypt(serialized))
-      } yield mkCookie(cookieName, s"$signed-$encrypted")
-  }
+  def cookie(content: String): F[ResponseCookie] =
+    for {
+      now <- Sync[F].delay(new Date().getTime / 1000)
+      expires = now + maxAge.toSeconds
+      serialized = s"$expires-$content"
+      signed <- Sync[F].delay(sign(serialized))
+      encrypted <- Sync[F].delay(encrypt(serialized))
+    } yield mkCookie(cookieName, s"$signed-$encrypted")
 
   def check(cookie: RequestCookie): IO[Option[String]] =
     IO.delay {
