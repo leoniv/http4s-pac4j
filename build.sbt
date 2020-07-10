@@ -1,6 +1,6 @@
 scalaVersion := "2.12.11" // Also supports 2.11.x
 organization := "org.pac4j"
-version      := "1.0.0-SNAPSHOT"
+version      := "1.0.0-leoniv-SNAPSHOT"
 
 val circeVersion = "0.13.0"
 val http4sVersion = "0.21.6"
